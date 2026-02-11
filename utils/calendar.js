@@ -28,7 +28,7 @@ async function updateCalendar(client) {
 
         // Build the embed
         const embed = new EmbedBuilder()
-            .setTitle('📅 Scheduled Departures')
+            .setTitle('<:e_plane:1397829563249328138> Scheduled Departures')
             .setColor(ids.EMBED_COLOR)
             .setDescription(buildCalendarDescription(flights))
             .setTimestamp()
@@ -100,7 +100,7 @@ function buildCalendarDescription(flights) {
         return 'Below are the upcoming departures from United Airlines:\n\n*No flights currently scheduled.*';
     }
 
-    let desc = 'Below are the upcoming departures from United Airlines:\n\n';
+    let desc = '<:UnitedCurve:1297074894164463628> Below are scheduled, upcoming departures operated by United Airlines and its subsidiaries.\n\n';
 
     const now = Math.floor(Date.now() / 1000);
     const todayStart = getTodayStartUnix();
@@ -143,7 +143,7 @@ function buildCalendarDescription(flights) {
 }
 
 function formatFlightLine(flight) {
-    const emoji = process.env.UNITED_TAIL_EMOJI || '✈️';
+    const emoji = '<:UATail2:1076723231391744050>';
     const route = `${flight.departure} ➜ ${flight.destination}`;
     return `${emoji} **${flight.flightNumber}** | ${route} | <t:${flight.serverOpenTime}:F>\n`;
 }
