@@ -1,0 +1,111 @@
+// utils/embed.js
+const { EmbedBuilder } = require('discord.js');
+const { getPositionsForAircraft, DEPARTMENTS } = require('../config/aircraft');
+const ids = require('../config/ids');
+
+/**
+ * Build the flight info embed (first embed in forum post)
+ */
+function buildFlightInfoEmbed(flight) {
+    const route = `${flight.departure} ➜ ${flight.destination}`;
+
+    const embed = new EmbedBuilder()
+        .setTitle('✈️ Flight Allocation')
+        .setColor(ids.EMBED_COLOR)
+        .setDescription(
+            `Hello, Volare employees!\n\n` +
+            `> A flight has been scheduled for the near future. Please find the necessary information below to allocate for this flight. ` +
+            `If you are available, kindly use the \`/allocate\` command in <#${ids.CMDS_CHANNEL_ID}> to secure a position for this flight. ` +
+            `Please note that your allocation is binding, and you are required to work on this flight. ` +
+            `If you change your mind or become unavailable, please use the \`/unallocate\` command.\n\n` +
+            `> **Dispatcher:** <@${flight.dispatcherId}>\n` +
+            `> **Flight Number:** ${flight.flightNumber}\n` +
+            `> **Route:** ${route}\n` +
+            `> **Aircraft:** ${flight.aircraft}\n` +
+            `> **Staff Join Time:** <t:${flight.employeeJoinTime}:F>\n` +
+            `> **Server Open Time:** <t:${flight.serverOpenTime}:F>`
+        )
+        .setTimestamp();
+
+    return embed;
+}
+
+/**
+ * Build the allocation sheet embed (second embed in forum post)
+ */
+function buildAllocationEmbed(flight) {
+    const positions = getPositionsForAircraft(flight.aircraft);
+    if (!positions) return null;
+
+    const embed = new EmbedBuilder()
+        .setTitle('📋 Allocations')
+        .setColor(ids.EMBED_COLOR);
+
+    // Build allocation lookup: position -> [user mentions]
+    const allocationMap = {};
+    for (const alloc of (flight.allocations || [])) {
+        if (!allocationMap[alloc.position]) allocationMap[alloc.position] = [];
+        allocationMap[alloc.position].push(`<@${alloc.userId}>`);
+    }
+
+    // Add dispatcher to the description
+    let description = `**Dispatcher:** <@${flight.dispatcherId}>\n\n`;
+
+    // Build each department section
+    for (const dept of DEPARTMENTS) {
+        description += `**__${dept}__**\n`;
+
+        // Get positions in this department
+        const deptPositions = Object.entries(positions)
+            .filter(([_, config]) => config.department === dept);
+
+        for (const [role, config] of deptPositions) {
+            const allocated = allocationMap[role] || [];
+            const filled = allocated.length;
+            const max = config.max;
+
+            description += `> **${role}** (${filled}/${max})\n`;
+
+            if (allocated.length > 0) {
+                for (const mention of allocated) {
+                    description += `> ┃ ${mention}\n`;
+                }
+            } else {
+                description += `> ┃ *Open*\n`;
+            }
+            description += `\n`;
+        }
+    }
+
+    embed.setDescription(description);
+    embed.setTimestamp();
+
+    return embed;
+}
+
+/**
+ * Build the archive embed (sent when a flight is deleted)
+ */
+function buildArchiveEmbed(flight) {
+    const allocationEmbed = buildAllocationEmbed(flight);
+    const infoEmbed = buildFlightInfoEmbed(flight);
+
+    const archiveEmbed = new EmbedBuilder()
+        .setTitle(`🗄️ Archived: ${flight.flightNumber}`)
+        .setColor(0x808080) // gray
+        .setDescription(
+            `**Flight Number:** ${flight.flightNumber}\n` +
+            `**Route:** ${flight.departure} ➜ ${flight.destination}\n` +
+            `**Aircraft:** ${flight.aircraft}\n` +
+            `**Dispatcher:** <@${flight.dispatcherId}>\n` +
+            `**Staff Join Time:** <t:${flight.employeeJoinTime}:F>\n` +
+            `**Server Open Time:** <t:${flight.serverOpenTime}:F>\n` +
+            `**Status:** ${flight.status}\n` +
+            `**Archived At:** <t:${Math.floor(Date.now() / 1000)}:F>`
+        )
+        .setTimestamp();
+
+    return { archiveEmbed, allocationEmbed };
+}
+
+module.exports = { buildFlightInfoEmbed, buildAllocationEmbed, buildArchiveEmbed };
