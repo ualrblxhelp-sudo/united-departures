@@ -132,14 +132,35 @@ client.on(Events.InteractionCreate, async (interaction) => {
 // ============================================================
 // Ready
 // ============================================================
-client.once(Events.ClientReady, (c) => {
+client.once(Events.ClientReady, async (c) => {
     console.log(`✅ Logged in as ${c.user.tag}`);
     console.log(`   Servers: ${c.guilds.cache.map(g => g.name).join(', ')}`);
+
+    // Auto-register slash commands
+    try {
+        const { REST, Routes } = require('discord.js');
+        const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
+        const cmds = [...client.commands.values()].map(c => c.data.toJSON());
+        const servers = [process.env.STAFF_SERVER_ID, process.env.CALENDAR_SERVER_ID].filter(Boolean);
+        for (const id of servers) {
+            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, id), { body: cmds });
+            console.log(`✅ Commands registered to server ${id}`);
+        }
+    } catch (err) { console.error('❌ Command registration error:', err); }
 
     // Initial calendar refresh
     const { updateCalendar } = require('./utils/calendar');
     updateCalendar(client).catch(err => console.error('[Boot] Calendar update error:', err));
 });
+```
+
+Click **Commit changes**. Render will auto-redeploy. Check the logs — you should now see:
+```
+✅ Connected to MongoDB
+✅ Logged in as YourBotName#1234
+   Servers: ...
+✅ Commands registered to server 1309560657473179679
+✅ Commands registered to server 1007704123312967760
 
 // ============================================================
 // Connect to MongoDB and start bot
