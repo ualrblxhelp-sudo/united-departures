@@ -6,7 +6,7 @@ const {
 const Flight = require('../models/Flight');
 const { AIRCRAFT } = require('../config/aircraft');
 const { buildFlightInfoEmbed, buildAllocationEmbed } = require('../utils/embed');
-const { updateCalendar } = require('../utils/calendar');
+const { updateCalendar, updateStaffCalendar } = require('../utils/calendar');
 const ids = require('../config/ids');
 
 module.exports = {
@@ -108,6 +108,7 @@ module.exports = {
         } catch (err) { console.error('[Edit] Forum update error:', err); }
 
         try { await updateCalendar(interaction.client); } catch (err) { console.error('[Edit] Calendar error:', err); }
+        try { await updateStaffCalendar(interaction.client); } catch (err) { console.error('[Edit] Staff calendar error:', err); }
 
         await interaction.reply({
             content: `✅ Flight **${flightNumber}** updated:\n${changes.map(c => `• ${c}`).join('\n')}`,
