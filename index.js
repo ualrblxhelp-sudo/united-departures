@@ -112,6 +112,9 @@ client.once(Events.ClientReady, async function(c) {
     calendar.updateCalendar(client).catch(function(err) {
         console.error('Calendar update error:', err);
     });
+    calendar.updateStaffCalendar(client).catch(function(err) {
+        console.error('Calendar update error:', err);
+    });
 });
 
 async function start() {
