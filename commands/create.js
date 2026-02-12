@@ -6,9 +6,7 @@ const {
 const Flight = require('../models/Flight');
 const { getAircraftChoices, AIRCRAFT } = require('../config/aircraft');
 const { buildFlightInfoEmbed, buildAllocationEmbed } = require('../utils/embed');
-const { updateCalendar } = require('../utils/calendar');
-const ids = require('../config/ids');
-
+const { updateCalendar, updateStaffCalendar, announceNewFlight } = require('../utils/calendar');const ids = require('../config/ids');
 const pendingCreations = new Map();
 
 module.exports = {
@@ -111,6 +109,8 @@ module.exports = {
         } catch (err) { console.error('[Create] Forum error:', err); }
 
         try { await updateCalendar(interaction.client); } catch (err) { console.error('[Create] Calendar error:', err); }
+        try { await updateStaffCalendar(interaction.client); } catch (err) { console.error('[Create] Staff calendar error:', err); }
+        try { await announceNewFlight(interaction.client, flight); } catch (err) { console.error('[Create] Announce error:', err); }
 
         pendingCreations.delete(interaction.user.id);
         await interaction.editReply({ content: `✅ Flight **${p.flightNumber}** (${p.departure} ➜ ${p.destination}) created and posted!`, embeds: [], components: [] });
