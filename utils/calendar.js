@@ -154,4 +154,47 @@ function getTodayStartUnix() {
     return Math.floor(todayStart.getTime() / 1000);
 }
 
-module.exports = { updateCalendar };
+async function updateStaffCalendar(client) {
+    try {
+        const guild = client.guilds.cache.get(ids.STAFF_SERVER_ID);
+        if (!guild) return;
+        const channel = guild.channels.cache.get(ids.STAFF_CALENDAR_CHANNEL_ID);
+        if (!channel) return;
+
+        const flights = await Flight.find({ status: 'scheduled' }).sort({ serverOpenTime: 1 });
+        const embed = new EmbedBuilder()
+            .setTitle('<:e_plane:1397829563249328138> Scheduled Departures')
+            .setColor(ids.EMBED_COLOR)
+            .setDescription(buildCalendarDescription(flights))
+            .setTimestamp()
+            .setFooter({ text: 'United Airlines \u2022 Auto-updated' });
+
+        var recentMessages = await channel.messages.fetch({ limit: 20 });
+        var botMessage = recentMessages.find(function(m) {
+            return m.author.id === client.user.id && m.embeds.length > 0 && m.embeds[0].title && m.embeds[0].title.includes('Scheduled Departures');
+        });
+
+        if (botMessage) {
+            await botMessage.edit({ embeds: [embed] });
+        } else {
+            await channel.send({ embeds: [embed] });
+        }
+    } catch (err) {
+        console.error('[StaffCalendar] Error:', err);
+    }
+}
+
+async function announceNewFlight(client, flight) {
+    try {
+        const guild = client.guilds.cache.get(ids.STAFF_SERVER_ID);
+        if (!guild) return;
+        const channel = guild.channels.cache.get(ids.STAFF_CALENDAR_CHANNEL_ID);
+        if (!channel) return;
+
+        await channel.send('@everyone A flight has been scheduled. You may allocate accordingly in the <#' + ids.FORUM_CHANNEL_ID + '> forum.');
+    } catch (err) {
+        console.error('[Announce] Error:', err);
+    }
+}
+
+module.exports = { updateCalendar, updateStaffCalendar, announceNewFlight };
