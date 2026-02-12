@@ -10,11 +10,11 @@ function buildFlightInfoEmbed(flight) {
     const route = `${flight.departure} ➜ ${flight.destination}`;
 
     const embed = new EmbedBuilder()
-        .setTitle('✈️ Flight Allocation')
-        .setColor(ids.EMBED_COLOR)
+        .setTitle('<:volare_click:1408484978362290287> Flight Information')
+        .setColor(0x551e5f)
         .setDescription(
             `Hello, Volare employees!\n\n` +
-            `> A flight has been scheduled for the near future. Please find the necessary information below to allocate for this flight. ` +
+            `<:volare_arrow:1408485394747490385> A flight has been scheduled for the near future. Please find the necessary information below to allocate for this flight. ` +
             `If you are available, kindly use the \`/allocate\` command in <#${ids.CMDS_CHANNEL_ID}> to secure a position for this flight. ` +
             `Please note that your allocation is binding, and you are required to work on this flight. ` +
             `If you change your mind or become unavailable, please use the \`/unallocate\` command.\n\n` +
@@ -38,8 +38,8 @@ function buildAllocationEmbed(flight) {
     if (!positions) return null;
 
     const embed = new EmbedBuilder()
-        .setTitle('📋 Allocations')
-        .setColor(ids.EMBED_COLOR);
+        .setTitle('<:volare_fa:1408298318861176920> Allocations')
+        .setColor(0x551e5f)
 
     // Build allocation lookup: position -> [user mentions]
     const allocationMap = {};
