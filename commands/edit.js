@@ -21,13 +21,13 @@ module.exports = {
 
     async execute(interaction) {
         if (!interaction.member.roles.cache.has(ids.FLIGHT_HOST_ROLE_ID)) {
-            return interaction.reply({ content: '❌ You need the Flight Host role.', ephemeral: true });
+            return interaction.reply({ content: '❌ You need the Flight Host role.', flags: [4096] });
         }
 
         const flightNumber = interaction.options.getString('flight_number').toUpperCase().trim();
         const flight = await Flight.findOne({ flightNumber, status: 'scheduled' });
         if (!flight) {
-            return interaction.reply({ content: `❌ Flight **${flightNumber}** not found.`, ephemeral: true });
+            return interaction.reply({ content: `❌ Flight **${flightNumber}** not found.`, flags: [4096] });
         }
 
         const modal = new ModalBuilder()
@@ -55,7 +55,7 @@ module.exports = {
     async handleModalSubmit(interaction) {
         const flightNumber = interaction.customId.replace('edit_modal_', '');
         const flight = await Flight.findOne({ flightNumber, status: 'scheduled' });
-        if (!flight) return interaction.reply({ content: '❌ Flight not found.', ephemeral: true });
+        if (!flight) return interaction.reply({ content: '❌ Flight not found.', flags: [4096] });
 
         const departure = interaction.fields.getTextInputValue('departure').toUpperCase().trim();
         const destination = interaction.fields.getTextInputValue('destination').toUpperCase().trim();
@@ -89,7 +89,7 @@ module.exports = {
         }
 
         if (changes.length === 0) {
-            return interaction.reply({ content: '⚠️ No changes detected.', ephemeral: true });
+            return interaction.reply({ content: '⚠️ No changes detected.', flags: [4096] });
         }
 
         await flight.save();
@@ -112,7 +112,7 @@ module.exports = {
 
         await interaction.reply({
             content: `✅ Flight **${flightNumber}** updated:\n${changes.map(c => `• ${c}`).join('\n')}`,
-            ephemeral: true,
+            flags: [4096],
         });
     },
 };
