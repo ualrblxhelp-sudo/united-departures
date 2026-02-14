@@ -20,13 +20,13 @@ module.exports = {
 
     async execute(interaction) {
         if (!interaction.member.roles.cache.has(ids.FLIGHT_HOST_ROLE_ID)) {
-            return interaction.reply({ content: '❌ You need the Flight Host role.', ephemeral: true });
+            return interaction.reply({ content: '❌ You need the Flight Host role.', flags: [4096] });
         }
 
         const flightNumber = interaction.options.getString('flight_number').toUpperCase().trim();
         const flight = await Flight.findOne({ flightNumber, status: 'scheduled' });
         if (!flight) {
-            return interaction.reply({ content: `❌ Flight **${flightNumber}** not found.`, ephemeral: true });
+            return interaction.reply({ content: `❌ Flight **${flightNumber}** not found.`, flags: [4096] });
         }
 
         pendingDeletes.set(interaction.user.id, flightNumber);
@@ -41,7 +41,7 @@ module.exports = {
         await interaction.reply({
             content: `⚠️ Are you sure you want to delete flight **${flightNumber}** (${flight.departure} ➜ ${flight.destination})?\n\nThis flight has **${allocCount}** allocated crew member(s). The allocation sheet will be archived.`,
             components: [row],
-            ephemeral: true,
+            flags: [4096],
         });
     },
 
