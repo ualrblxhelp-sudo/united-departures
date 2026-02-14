@@ -17,7 +17,7 @@ module.exports = {
         // Fetch all scheduled flights
         const flights = await Flight.find({ status: 'scheduled' }).sort({ serverOpenTime: 1 });
         if (flights.length === 0) {
-            return interaction.reply({ content: '❌ No scheduled flights available.', ephemeral: true });
+            return interaction.reply({ content: '❌ No scheduled flights available.', flags: [4096] });
         }
 
         const options = flights.slice(0, 25).map(f => ({
