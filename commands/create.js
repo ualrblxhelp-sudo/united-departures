@@ -17,7 +17,7 @@ module.exports = {
 
     async execute(interaction) {
         if (!interaction.member.roles.cache.has(ids.FLIGHT_HOST_ROLE_ID)) {
-            return interaction.reply({ content: '❌ You need the Flight Host role to create flights.', ephemeral: true });
+            return interaction.reply({ content: '❌ You need the Flight Host role to create flights.', flags: [4096] });
         }
         const choices = getAircraftChoices();
         const select = new StringSelectMenuBuilder()
@@ -27,7 +27,7 @@ module.exports = {
         await interaction.reply({
             content: '**Step 1/3** — Select the aircraft for this flight:',
             components: [new ActionRowBuilder().addComponents(select)],
-            ephemeral: true,
+            flags: [4096],
         });
     },
 
@@ -46,7 +46,7 @@ module.exports = {
 
     async handleModalSubmit(interaction) {
         const pending = pendingCreations.get(interaction.user.id);
-        if (!pending?.aircraft) return interaction.reply({ content: '❌ Session expired. Use `/create` again.', ephemeral: true });
+        if (!pending?.aircraft) return interaction.reply({ content: '❌ Session expired. Use `/create` again.', flags: [4096] });
 
         const flightNumber = interaction.fields.getTextInputValue('flight_number').toUpperCase().trim();
         const departure = interaction.fields.getTextInputValue('departure').toUpperCase().trim();
@@ -55,13 +55,13 @@ module.exports = {
         const serverOpenTime = parseInt(interaction.fields.getTextInputValue('server_open_time').trim());
 
         if (isNaN(employeeJoinTime) || isNaN(serverOpenTime)) {
-            return interaction.reply({ content: '❌ Invalid timestamps. Use Unix timestamps (numbers). Try [discordtimestamp.com](https://discordtimestamp.com).', ephemeral: true });
+            return interaction.reply({ content: '❌ Invalid timestamps. Use Unix timestamps (numbers). Try [discordtimestamp.com](https://discordtimestamp.com).', flags: [4096] });
         }
         if (!/^[A-Z]{3}$/.test(departure) || !/^[A-Z]{3}$/.test(destination)) {
-            return interaction.reply({ content: '❌ IATA codes must be exactly 3 letters.', ephemeral: true });
+            return interaction.reply({ content: '❌ IATA codes must be exactly 3 letters.', flags: [4096] });
         }
         const existing = await Flight.findOne({ flightNumber, status: 'scheduled' });
-        if (existing) return interaction.reply({ content: `❌ Flight **${flightNumber}** already exists.`, ephemeral: true });
+        if (existing) return interaction.reply({ content: `❌ Flight **${flightNumber}** already exists.`, flags: [4096] });
 
         pendingCreations.set(interaction.user.id, { ...pending, flightNumber, departure, destination, employeeJoinTime, serverOpenTime });
 
@@ -73,7 +73,7 @@ module.exports = {
             new ButtonBuilder().setCustomId('create_confirm').setLabel('Confirm & Create').setStyle(ButtonStyle.Success).setEmoji('✅'),
             new ButtonBuilder().setCustomId('create_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji('❌'),
         );
-        await interaction.reply({ content: '**Step 3/3** — Review and confirm:', embeds: [embed], components: [row], ephemeral: true });
+        await interaction.reply({ content: '**Step 3/3** — Review and confirm:', embeds: [embed], components: [row], flags: [4096] });
     },
 
     async handleConfirm(interaction) {
