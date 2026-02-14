@@ -33,7 +33,6 @@ const flightSchema = new mongoose.Schema({
 });
 
 // Index for fast lookups
-flightSchema.index({ flightNumber: 1 });
 flightSchema.index({ status: 1 });
 flightSchema.index({ serverOpenTime: 1 });
 
