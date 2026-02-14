@@ -17,7 +17,7 @@ module.exports = {
         }).sort({ serverOpenTime: 1 });
 
         if (flights.length === 0) {
-            return interaction.reply({ content: '❌ You are not allocated to any flights.', ephemeral: true });
+            return interaction.reply({ content: '❌ You are not allocated to any flights.', flags: [4096] });
         }
 
         const options = flights.slice(0, 25).map(f => {
@@ -37,7 +37,7 @@ module.exports = {
         await interaction.reply({
             content: 'Select the flight you want to remove yourself from:',
             components: [new ActionRowBuilder().addComponents(select)],
-            ephemeral: true,
+            flags: [4096],
         });
     },
 
