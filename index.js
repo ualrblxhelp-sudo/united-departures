@@ -77,7 +77,7 @@ client.on(Events.InteractionCreate, async function(interaction) {
     } catch (err) {
         console.error('[Bot] Interaction error:', err);
         try {
-            var reply = { content: 'An error occurred. Please try again.', ephemeral: true };
+            var reply = { content: 'An error occurred. Please try again.' };
             if (interaction.deferred || interaction.replied) {
                 await interaction.followUp(reply);
             } else {
