@@ -34,7 +34,7 @@ module.exports = {
         await interaction.reply({
             content: '**Step 1/2** — Select the flight you want to allocate for:',
             components: [new ActionRowBuilder().addComponents(select)],
-            ephemeral: true,
+            flags: [4096],
         });
     },
 
