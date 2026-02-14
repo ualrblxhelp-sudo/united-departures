@@ -112,6 +112,25 @@ module.exports = {
         try { await updateStaffCalendar(interaction.client); } catch (err) { console.error('[Create] Staff calendar error:', err); }
         try { await announceNewFlight(interaction.client, flight); } catch (err) { console.error('[Create] Announce error:', err); }
 
+        // Create Discord scheduled event in calendar server
+        try {
+            var calGuild = interaction.client.guilds.cache.get(ids.CALENDAR_SERVER_ID);
+            if (calGuild) {
+                var startTime = new Date(flight.serverOpenTime * 1000);
+                var endTime = new Date((flight.serverOpenTime + 3600) * 1000);
+                await calGuild.scheduledEvents.create({
+                    name: flight.flightNumber + ' | ' + flight.departure + ' \u27A1 ' + flight.destination,
+                    scheduledStartTime: startTime,
+                    scheduledEndTime: endTime,
+                    privacyLevel: 2,
+                    entityType: 3,
+                    entityMetadata: { location: 'https://www.roblox.com/games/95918419045248/Terminal-A-Newark-Liberty-Intl-Airport' },
+                    description: 'Dispatcher - <@' + flight.dispatcherId + '>\nFlight Number - ' + flight.flightNumber + '\nIATA Route - ' + flight.departure + ' to ' + flight.destination + '\nAircraft - ' + flight.aircraft,
+                });
+                console.log('[Create] Discord event created for ' + flight.flightNumber);
+            }
+        } catch (err) { console.error('[Create] Event creation error:', err); }
+
         pendingCreations.delete(interaction.user.id);
         await interaction.editReply({ content: `✅ Flight **${p.flightNumber}** (${p.departure} ➜ ${p.destination}) created and posted!`, embeds: [], components: [] });
     },
