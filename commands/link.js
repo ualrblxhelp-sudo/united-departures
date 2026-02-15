@@ -36,7 +36,7 @@ module.exports = {
         var player = await PM.findOne({ username: { $regex: new RegExp('^' + username + '$', 'i') } });
         if (!player) {
             return interaction.reply({
-                content: 'Roblox account **' + username + '** not found in our system. You need to join a United Volare flight first to create your profile.',
+                content: 'Roblox account **' + username + '** not found in our system. You need to join a United flight to configure your profile.',
                 flags: [4096],
             });
         }
