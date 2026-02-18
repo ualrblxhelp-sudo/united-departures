@@ -129,10 +129,16 @@ module.exports = {
                     entityMetadata: { location: 'https://www.roblox.com/games/95918419045248/Terminal-A-Newark-Liberty-Intl-Airport' },
                     description: 'Dispatcher - <@' + flight.dispatcherId + '>\nFlight Number - ' + flight.flightNumber + '\nIATA Route - ' + flight.departure + ' to ' + flight.destination + '\nAircraft - ' + flight.aircraft,
                 };
-                try {
-                    var imagePath = path.join(__dirname, '..', 'assets', 'event-cover.png');
-                    eventOptions.image = fs.readFileSync(imagePath);
-                } catch (imgErr) {}
+                var aircraftImages = {
+                    '737-800 NEXT': 'event-cover-738.png',
+                };
+                var imageFile = aircraftImages[flight.aircraft];
+                if (imageFile) {
+                    try {
+                        var imagePath = path.join(__dirname, '..', imageFile);
+                        eventOptions.image = fs.readFileSync(imagePath);
+                    } catch (imgErr) {}
+                }
                 var event = await calGuild.scheduledEvents.create(eventOptions);
                 flight.discordEventId = event.id;
                 await flight.save();
