@@ -130,7 +130,7 @@ module.exports = {
                     description: 'Dispatcher - <@' + flight.dispatcherId + '>\nFlight Number - ' + flight.flightNumber + '\nIATA Route - ' + flight.departure + ' to ' + flight.destination + '\nAircraft - ' + flight.aircraft,
                 };
                 var aircraftImages = {
-                    '737-800 NEXT': 'event-cover-738.png',
+                    '737-800 NEXT': '737-800.png',
                 };
                 var imageFile = aircraftImages[flight.aircraft];
                 if (imageFile) {
