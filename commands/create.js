@@ -116,9 +116,11 @@ module.exports = {
         try {
             var calGuild = interaction.client.guilds.cache.get(ids.CALENDAR_SERVER_ID);
             if (calGuild) {
+                var fs = require('fs');
+                var path = require('path');
                 var startTime = new Date(flight.serverOpenTime * 1000);
                 var endTime = new Date((flight.serverOpenTime + 3600) * 1000);
-                await calGuild.scheduledEvents.create({
+                var eventOptions = {
                     name: flight.flightNumber + ' | ' + flight.departure + ' \u27A1 ' + flight.destination,
                     scheduledStartTime: startTime,
                     scheduledEndTime: endTime,
@@ -126,7 +128,14 @@ module.exports = {
                     entityType: 3,
                     entityMetadata: { location: 'https://www.roblox.com/games/95918419045248/Terminal-A-Newark-Liberty-Intl-Airport' },
                     description: 'Dispatcher - <@' + flight.dispatcherId + '>\nFlight Number - ' + flight.flightNumber + '\nIATA Route - ' + flight.departure + ' to ' + flight.destination + '\nAircraft - ' + flight.aircraft,
-                });
+                };
+                try {
+                    var imagePath = path.join(__dirname, '..', 'assets', 'event-cover.png');
+                    eventOptions.image = fs.readFileSync(imagePath);
+                } catch (imgErr) {}
+                var event = await calGuild.scheduledEvents.create(eventOptions);
+                flight.discordEventId = event.id;
+                await flight.save();
                 console.log('[Create] Discord event created for ' + flight.flightNumber);
             }
         } catch (err) { console.error('[Create] Event creation error:', err); }
