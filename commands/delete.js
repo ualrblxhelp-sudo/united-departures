@@ -81,7 +81,27 @@ module.exports = {
                 }
             }
         } catch (err) { console.error('[Delete] Thread archive error:', err); }
+        
+        // Delete Discord scheduled event (check both servers)
+        try {
+            if (flight.discordEventId) {
+                var servers = [ids.CALENDAR_SERVER_ID, ids.STAFF_SERVER_ID];
+                for (var s = 0; s < servers.length; s++) {
+                    var guild = interaction.client.guilds.cache.get(servers[s]);
+                    if (guild) {
+                        var event = await guild.scheduledEvents.fetch(flight.discordEventId).catch(function() { return null; });
+                        if (event) {
+                            await event.delete();
+                            console.log('[Delete] Discord event deleted from server ' + servers[s]);
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (err) { console.error('[Delete] Event delete error:', err); }
 
+        // Mark as cancelled in DB
+        flight.status = 'cancelled';
         // Mark as cancelled in DB
         flight.status = 'cancelled';
         flight.archivedAt = new Date();
