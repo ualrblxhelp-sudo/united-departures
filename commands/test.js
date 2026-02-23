@@ -13,12 +13,12 @@ var pendingTests = new Map();
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('test')
-        .setDescription('Create a test flight (Volare server only)'),
+        .setDescription('Create a test flight'),
     pendingTests: pendingTests,
 
     async execute(interaction) {
         if (!interaction.member.roles.cache.has(ids.FLIGHT_HOST_ROLE_ID)) {
-            return interaction.reply({ content: '\u274C You need the Flight Host role.', flags: [4096] });
+            return interaction.reply({ content: '\u274C You need a Dispatcher qualification.', flags: [4096] });
         }
         var choices = getAircraftChoices();
         var select = new StringSelectMenuBuilder()
@@ -70,7 +70,7 @@ module.exports = {
         });
 
         var acName = AIRCRAFT[pending.aircraft] ? AIRCRAFT[pending.aircraft].name : pending.aircraft;
-        var embed = new EmbedBuilder().setTitle('\u2708\uFE0F Confirm Test Flight').setColor(0xFFA500)
+        var embed = new EmbedBuilder().setTitle('\u2708\uFE0F Confirm Test Flight').setColor(0x1414d2)
             .setDescription('**\u26A0\uFE0F TEST FLIGHT \u2014 Volare Server Only**\n\n**Flight Number:** ' + flightNumber + '\n**Route:** ' + departure + ' \u27A1 ' + destination + '\n**Aircraft:** ' + acName + '\n**Staff Join Time:** <t:' + employeeJoinTime + ':F>\n**Server Open Time:** <t:' + serverOpenTime + ':F>\n**Dispatcher:** <@' + interaction.user.id + '>');
 
         var row = new ActionRowBuilder().addComponents(
@@ -103,9 +103,9 @@ module.exports = {
             if (forum) {
                 var infoEmbed = buildFlightInfoEmbed(flight);
                 infoEmbed.setTitle('<:volare_click:1408484978362290287> Test Flight Information');
-                infoEmbed.setColor(0xFFA500);
+                infoEmbed.setColor(0x1414d2);
                 var allocEmbed = buildAllocationEmbed(flight);
-                allocEmbed.setColor(0xFFA500);
+                allocEmbed.setColor(0x1414d2);
                 var thread = await forum.threads.create({
                     name: '[TEST] ' + flight.flightNumber + ' - Crew Allocation',
                     message: { content: '@everyone', embeds: [infoEmbed, allocEmbed] },
