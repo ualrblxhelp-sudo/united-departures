@@ -44,6 +44,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (id === 'unallocate_flight') {
                 return await client.commands.get('unallocate').handleFlightSelect(interaction);
             }
+            if (id === 'test_aircraft') {
+                return await client.commands.get('test').handleAircraftSelect(interaction);
+            }
             return;
         }
 
@@ -54,6 +57,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             }
             if (mid.startsWith('edit_modal_')) {
                 return await client.commands.get('edit').handleModalSubmit(interaction);
+            }
+            if (mid === 'test_modal') {
+                return await client.commands.get('test').handleModalSubmit(interaction);
             }
             return;
         }
@@ -71,6 +77,12 @@ client.on(Events.InteractionCreate, async function(interaction) {
             }
             if (bid === 'delete_cancel') {
                 return await client.commands.get('delete').handleCancel(interaction);
+            }
+            if (bid === 'test_confirm') {
+                return await client.commands.get('test').handleConfirm(interaction);
+            }
+            if (bid === 'test_cancel') {
+                return await client.commands.get('test').handleCancel(interaction);
             }
             return;
         }
