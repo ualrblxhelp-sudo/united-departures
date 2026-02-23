@@ -129,8 +129,39 @@ module.exports = {
             }
         } catch (err) { console.error('[Test] Announce error:', err); }
 
-        // NO main server calendar update
-        // NO Discord scheduled event
+        // Create Discord scheduled event in STAFF server only
+        try {
+            var staffGuild = interaction.client.guilds.cache.get(ids.STAFF_SERVER_ID);
+            if (staffGuild) {
+                var fs = require('fs');
+                var path = require('path');
+                var startTime = new Date(flight.serverOpenTime * 1000);
+                var endTime = new Date((flight.serverOpenTime + 3600) * 1000);
+                var eventOptions = {
+                    name: '[TEST] ' + flight.flightNumber + ' | ' + flight.departure + ' \u27A1 ' + flight.destination,
+                    scheduledStartTime: startTime,
+                    scheduledEndTime: endTime,
+                    privacyLevel: 2,
+                    entityType: 3,
+                    entityMetadata: { location: 'https://www.roblox.com/games/95918419045248/Terminal-A-Newark-Liberty-Intl-Airport' },
+                    description: 'Dispatcher - <@' + flight.dispatcherId + '>\nFlight Number - ' + flight.flightNumber + '\nIATA Route - ' + flight.departure + ' to ' + flight.destination + '\nAircraft - ' + flight.aircraft + '\n\nThis is a test flight.',
+                };
+                var aircraftImages = {
+                    '737-800 NEXT': '737-800.png',
+                };
+                var imageFile = aircraftImages[flight.aircraft];
+                if (imageFile) {
+                    try {
+                        var imagePath = path.join(__dirname, '..', imageFile);
+                        eventOptions.image = fs.readFileSync(imagePath);
+                    } catch (imgErr) {}
+                }
+                var event = await staffGuild.scheduledEvents.create(eventOptions);
+                flight.discordEventId = event.id;
+                await flight.save();
+                console.log('[Test] Discord event created for ' + flight.flightNumber);
+            }
+        } catch (err) { console.error('[Test] Event creation error:', err); }
 
         pendingTests.delete(interaction.user.id);
         await interaction.editReply({
