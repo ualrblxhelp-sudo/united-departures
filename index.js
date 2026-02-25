@@ -32,6 +32,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
 
         if (interaction.isStringSelectMenu()) {
             var id = interaction.customId;
+            if (id === 'create_type') {
+                return await client.commands.get('create').handleTypeSelect(interaction);
+            }
             if (id === 'create_aircraft') {
                 return await client.commands.get('create').handleAircraftSelect(interaction);
             }
