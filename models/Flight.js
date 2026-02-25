@@ -27,6 +27,7 @@ const flightSchema = new mongoose.Schema({
     calendarMessageId: { type: String },   // Persistent calendar message (shared)
 
     // Status
+    flightType: { type: String, default: 'regular', enum: ['regular', 'premium', 'test'] },
     status: { type: String, default: 'scheduled', enum: ['scheduled', 'active', 'completed', 'cancelled'] },
     createdAt: { type: Date, default: Date.now },
     archivedAt: { type: Date },
