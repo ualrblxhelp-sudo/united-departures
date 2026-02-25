@@ -4,7 +4,7 @@ const {
 } = require('discord.js');
 const Flight = require('../models/Flight');
 const { buildArchiveEmbed, buildAllocationEmbed } = require('../utils/embed');
-const { updateCalendar, updateStaffCalendar } = require('../utils/calendar');const ids = require('../config/ids');
+const { updateAllCalendars } = require('../utils/calendar');
 const pendingDeletes = new Map();
 
 module.exports = {
@@ -108,8 +108,7 @@ module.exports = {
         await flight.save();
 
         // Update calendar
-        try { await updateCalendar(interaction.client); } catch (err) { console.error('[Delete] Calendar error:', err); }
-        try { await updateStaffCalendar(interaction.client); } catch (err) { console.error('[Delete] Staff calendar error:', err); }
+        try { await updateAllCalendars(interaction.client); } catch (err) { console.error('[Delete] Calendar error:', err); }
         pendingDeletes.delete(interaction.user.id);
         await interaction.editReply({
             content: `✅ Flight **${flightNumber}** has been deleted and archived.`,
