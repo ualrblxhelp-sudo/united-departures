@@ -80,8 +80,8 @@ module.exports = {
         var flightNumber = interaction.fields.getTextInputValue('flight_number').toUpperCase().trim();
         var departure = interaction.fields.getTextInputValue('departure').toUpperCase().trim();
         var destination = interaction.fields.getTextInputValue('destination').toUpperCase().trim();
-        var employeeJoinTime = parseInt(interaction.fields.getTextInputValue('employee_join_time').trim());
-        var serverOpenTime = parseInt(interaction.fields.getTextInputValue('server_open_time').trim());
+        var employeeJoinTime = parseTimestamp(interaction.fields.getTextInputValue('employee_join_time').trim());
+        var serverOpenTime = parseTimestamp(interaction.fields.getTextInputValue('server_open_time').trim());
 
         if (isNaN(employeeJoinTime) || isNaN(serverOpenTime)) {
             return interaction.reply({ content: '\u274C Invalid timestamps. Use Unix timestamps.', flags: [4096] });
