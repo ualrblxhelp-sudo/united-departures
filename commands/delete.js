@@ -1,123 +1,148 @@
-// commands/delete.js
 const {
-    SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder,
+    SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
-const Flight = require('../models/Flight');
-const { buildArchiveEmbed, buildAllocationEmbed } = require('../utils/embed');
-const { updateAllCalendars } = require('../utils/calendar');
-const pendingDeletes = new Map();
+var Flight = require('../models/Flight');
+var { buildArchiveEmbed } = require('../utils/embed');
+var { updateAllCalendars } = require('../utils/calendar');
+var ids = require('../config/ids');
+
+var pendingDeletes = new Map();
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('delete')
-        .setDescription('Delete a scheduled flight and archive its allocation sheet')
-        .addStringOption(opt =>
-            opt.setName('flight_number')
-                .setDescription('The flight number to delete')
-                .setRequired(true)
-        ),
-    pendingDeletes,
+        .setDescription('Delete a scheduled flight and archive its allocation sheet'),
+    pendingDeletes: pendingDeletes,
 
     async execute(interaction) {
         if (!interaction.member.roles.cache.has(ids.FLIGHT_HOST_ROLE_ID)) {
-            return interaction.reply({ content: '❌ You need the Flight Host role.', flags: [4096] });
+            return interaction.reply({ content: '\u274C You need the Flight Host role.', flags: [4096] });
         }
 
-        const flightNumber = interaction.options.getString('flight_number').toUpperCase().trim();
-        const flight = await Flight.findOne({ flightNumber, status: 'scheduled' });
-        if (!flight) {
-            return interaction.reply({ content: `❌ Flight **${flightNumber}** not found.`, flags: [4096] });
+        var flights = await Flight.find({ status: 'scheduled' }).sort({ serverOpenTime: 1 });
+        if (flights.length === 0) {
+            return interaction.reply({ content: '\u274C No scheduled flights to delete.', flags: [4096] });
         }
 
-        pendingDeletes.set(interaction.user.id, flightNumber);
+        var options = flights.slice(0, 25).map(function(f) {
+            var date = new Date(f.serverOpenTime * 1000);
+            var dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            var timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            var prefix = '';
+            if (f.flightType === 'test') prefix = '[TEST] ';
+            if (f.flightType === 'premium') prefix = '[PREMIUM] ';
+            return {
+                label: prefix + f.flightNumber + ' \u2014 ' + f.departure + ' \u27A1 ' + f.destination,
+                description: dateStr + ' at ' + timeStr,
+                value: f._id.toString(),
+            };
+        });
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('delete_confirm').setLabel('Confirm Delete').setStyle(ButtonStyle.Danger).setEmoji('🗑️'),
-            new ButtonBuilder().setCustomId('delete_cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
-        );
-
-        const allocCount = flight.allocations.length;
+        var select = new StringSelectMenuBuilder()
+            .setCustomId('delete_flight')
+            .setPlaceholder('Select a flight to delete')
+            .addOptions(options);
 
         await interaction.reply({
-            content: `⚠️ Are you sure you want to delete flight **${flightNumber}** (${flight.departure} ➜ ${flight.destination})?\n\nThis flight has **${allocCount}** allocated crew member(s). The allocation sheet will be archived.`,
-            components: [row],
+            content: 'Select the flight you want to delete:',
+            components: [new ActionRowBuilder().addComponents(select)],
             flags: [4096],
         });
     },
 
+    async handleFlightSelect(interaction) {
+        var flightId = interaction.values[0];
+        var flight = await Flight.findById(flightId);
+        if (!flight || flight.status !== 'scheduled') {
+            return interaction.update({ content: '\u274C Flight not found.', components: [] });
+        }
+
+        pendingDeletes.set(interaction.user.id, flightId);
+
+        var date = new Date(flight.serverOpenTime * 1000);
+        var dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        var timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        var allocCount = flight.allocations.length;
+
+        var row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('delete_confirm').setLabel('Confirm Delete').setStyle(ButtonStyle.Danger).setEmoji('\uD83D\uDDD1\uFE0F'),
+            new ButtonBuilder().setCustomId('delete_cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+        );
+
+        await interaction.update({
+            content: '\u26A0\uFE0F Are you sure you want to delete **' + flight.flightNumber + '** (' + flight.departure + ' \u27A1 ' + flight.destination + ')?\n**Date:** ' + dateStr + ' at ' + timeStr + '\nThis flight has **' + allocCount + '** allocated crew member(s). The allocation sheet will be archived.',
+            components: [row],
+        });
+    },
+
     async handleConfirm(interaction) {
-        const flightNumber = pendingDeletes.get(interaction.user.id);
-        if (!flightNumber) return interaction.update({ content: '❌ Session expired.', components: [] });
+        var flightId = pendingDeletes.get(interaction.user.id);
+        if (!flightId) return interaction.update({ content: '\u274C Session expired.', components: [] });
 
         await interaction.deferUpdate();
 
-        const flight = await Flight.findOne({ flightNumber, status: 'scheduled' });
-        if (!flight) {
+        var flight = await Flight.findById(flightId);
+        if (!flight || flight.status !== 'scheduled') {
             pendingDeletes.delete(interaction.user.id);
-            return interaction.editReply({ content: '❌ Flight not found.', components: [] });
+            return interaction.editReply({ content: '\u274C Flight not found.', components: [] });
         }
 
-        // Archive to archive channel
+        // Archive
         try {
-            const guild = interaction.client.guilds.cache.get(ids.STAFF_SERVER_ID);
-            const archiveChannel = guild?.channels.cache.get(ids.ARCHIVE_CHANNEL_ID)
-                || await guild?.channels.fetch(ids.ARCHIVE_CHANNEL_ID).catch(() => null);
-
+            var guild = interaction.client.guilds.cache.get(ids.STAFF_SERVER_ID);
+            var archiveChannel = guild ? guild.channels.cache.get(ids.ARCHIVE_CHANNEL_ID) : null;
+            if (!archiveChannel && guild) archiveChannel = await guild.channels.fetch(ids.ARCHIVE_CHANNEL_ID).catch(function() { return null; });
             if (archiveChannel) {
-                const { archiveEmbed, allocationEmbed } = buildArchiveEmbed(flight);
-                await archiveChannel.send({ embeds: [archiveEmbed, allocationEmbed] });
+                var result = buildArchiveEmbed(flight);
+                await archiveChannel.send({ embeds: [result.archiveEmbed, result.allocationEmbed] });
             }
         } catch (err) { console.error('[Delete] Archive error:', err); }
 
-        // Lock/archive the forum thread
+        // Lock thread
         try {
             if (flight.forumThreadId) {
-                const guild = interaction.client.guilds.cache.get(ids.STAFF_SERVER_ID);
-                const thread = guild?.channels.cache.get(flight.forumThreadId)
-                    || await guild?.channels.fetch(flight.forumThreadId).catch(() => null);
+                var g = interaction.client.guilds.cache.get(ids.STAFF_SERVER_ID);
+                var thread = g ? g.channels.cache.get(flight.forumThreadId) : null;
+                if (!thread && g) thread = await g.channels.fetch(flight.forumThreadId).catch(function() { return null; });
                 if (thread) {
-                    await thread.setLocked(true).catch(() => {});
-                    await thread.setArchived(true).catch(() => {});
+                    await thread.setLocked(true).catch(function() {});
+                    await thread.setArchived(true).catch(function() {});
                 }
             }
-        } catch (err) { console.error('[Delete] Thread archive error:', err); }
-        
-        // Delete Discord scheduled event (check both servers)
+        } catch (err) { console.error('[Delete] Thread error:', err); }
+
+        // Delete Discord event (check both servers)
         try {
             if (flight.discordEventId) {
                 var servers = [ids.CALENDAR_SERVER_ID, ids.STAFF_SERVER_ID];
                 for (var s = 0; s < servers.length; s++) {
-                    var guild = interaction.client.guilds.cache.get(servers[s]);
-                    if (guild) {
-                        var event = await guild.scheduledEvents.fetch(flight.discordEventId).catch(function() { return null; });
+                    var evGuild = interaction.client.guilds.cache.get(servers[s]);
+                    if (evGuild) {
+                        var event = await evGuild.scheduledEvents.fetch(flight.discordEventId).catch(function() { return null; });
                         if (event) {
                             await event.delete();
-                            console.log('[Delete] Discord event deleted from server ' + servers[s]);
                             break;
                         }
                     }
                 }
             }
-        } catch (err) { console.error('[Delete] Event delete error:', err); }
+        } catch (err) { console.error('[Delete] Event error:', err); }
 
-        // Mark as cancelled in DB
-        flight.status = 'cancelled';
-        // Mark as cancelled in DB
         flight.status = 'cancelled';
         flight.archivedAt = new Date();
         await flight.save();
 
-        // Update calendar
         try { await updateAllCalendars(interaction.client); } catch (err) { console.error('[Delete] Calendar error:', err); }
+
         pendingDeletes.delete(interaction.user.id);
         await interaction.editReply({
-            content: `✅ Flight **${flightNumber}** has been deleted and archived.`,
+            content: '\u2705 Flight **' + flight.flightNumber + '** has been deleted and archived.',
             components: [],
         });
     },
 
     async handleCancel(interaction) {
         pendingDeletes.delete(interaction.user.id);
-        await interaction.update({ content: '❌ Delete cancelled.', components: [] });
+        await interaction.update({ content: '\u274C Delete cancelled.', components: [] });
     },
 };
