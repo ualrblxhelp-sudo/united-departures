@@ -89,8 +89,6 @@ module.exports = {
         if (!/^[A-Z]{3}$/.test(departure) || !/^[A-Z]{3}$/.test(destination)) {
             return interaction.reply({ content: '\u274C IATA codes must be exactly 3 letters.', flags: [4096] });
         }
-        var existing = await Flight.findOne({ flightNumber: flightNumber, status: 'scheduled' });
-        if (existing) return interaction.reply({ content: '\u274C Flight **' + flightNumber + '** already exists.', flags: [4096] });
 
         pending.flightNumber = flightNumber;
         pending.departure = departure;
