@@ -47,6 +47,13 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (id === 'unallocate_flight') {
                 return await client.commands.get('unallocate').handleFlightSelect(interaction);
             }
+            if (id === 'delete_flight') {
+                return await client.commands.get('delete').handleFlightSelect(interaction);
+            }
+            if (id === 'edit_flight') {
+                return await client.commands.get('edit').handleFlightSelect(interaction);
+            }
+            return;
             return;
         }
 
@@ -55,7 +62,7 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (mid === 'create_modal') {
                 return await client.commands.get('create').handleModalSubmit(interaction);
             }
-            if (mid.startsWith('edit_modal_')) {
+            if (mid === 'edit_modal') {
                 return await client.commands.get('edit').handleModalSubmit(interaction);
             }
             return;
