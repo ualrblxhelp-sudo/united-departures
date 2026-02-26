@@ -30,9 +30,9 @@ module.exports = {
             .setCustomId('create_type')
             .setPlaceholder('Select flight type')
             .addOptions([
-                { label: 'Regular Flight', value: 'regular', description: 'Normal scheduled flight', emoji: '\u2708\uFE0F' },
-                { label: 'Premium Flight', value: 'premium', description: 'Global Services, partners, honoraries', emoji: '\u2B50' },
-                { label: 'Test Flight', value: 'test', description: 'Staff test flight (Volare only)', emoji: '\uD83E\uDDEA' },
+                { label: 'Regular Flight', value: 'regular', description: 'Normal scheduled flight', emoji: { id: '1408481918177251438', name: 'volare_calendar' } },
+                { label: 'Premium Flight', value: 'premium', description: 'Global Services, partners, honoraries', emoji: { id: '1298320156342358088', name: 'UnitedGlobalServices' } },
+                { label: 'Test Flight', value: 'test', description: 'Staff test flight (Volare only)', emoji: { id: '1408298312448086056', name: 'volare_plane' } },
             ]);
         await interaction.reply({
             content: '**Step 1/4** \u2014 Select the flight type:',
