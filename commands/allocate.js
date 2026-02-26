@@ -14,6 +14,9 @@ module.exports = {
         .setDescription('Allocate yourself to a position on a scheduled flight'),
 
     async execute(interaction) {
+        if (interaction.guildId !== '1309560657473179679') {
+            return interaction.reply({ content: '\u274C This command can only be used in the United Volare server.', flags: [4096] });
+        }
         // Fetch all scheduled flights
         const flights = await Flight.find({ status: 'scheduled' }).sort({ serverOpenTime: 1 });
         if (flights.length === 0) {
