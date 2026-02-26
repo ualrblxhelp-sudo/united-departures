@@ -10,6 +10,9 @@ module.exports = {
         .setDescription('Remove yourself from a flight allocation'),
 
     async execute(interaction) {
+        if (interaction.guildId !== '1309560657473179679') {
+            return interaction.reply({ content: '\u274C This command can only be used in the United Volare server.', flags: [4096] });
+        }
         // Find flights where this user is allocated
         const flights = await Flight.find({
             status: 'scheduled',
