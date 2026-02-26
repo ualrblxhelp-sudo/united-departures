@@ -8,6 +8,14 @@ var { buildFlightInfoEmbed, buildAllocationEmbed } = require('../utils/embed');
 var { updateAllCalendars, announceNewFlight } = require('../utils/calendar');
 var ids = require('../config/ids');
 
+function parseTimestamp(input) {
+    var match = input.match(/<t:(\d+)(?::[tTdDfFR])?>/);
+    if (match) return parseInt(match[1]);
+    var num = parseInt(input);
+    if (!isNaN(num)) return num;
+    return NaN;
+}
+
 var pendingCreations = new Map();
 
 var FLIGHT_TYPES = {
