@@ -9,7 +9,7 @@ const allocationSchema = new mongoose.Schema({
 });
 
 const flightSchema = new mongoose.Schema({
-    flightNumber: { type: String, required: true, unique: true },
+    flightNumber: { type: String, required: true },
     departure: { type: String, required: true },       // IATA code
     destination: { type: String, required: true },      // IATA code
     aircraft: { type: String, required: true },         // aircraft key e.g. '737-800 NEXT'
