@@ -1,8 +1,7 @@
-// commands/unallocate.js
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
-const Flight = require('../models/Flight');
-const { buildFlightInfoEmbed, buildAllocationEmbed } = require('../utils/embed');
-const ids = require('../config/ids');
+var Flight = require('../models/Flight');
+var { buildFlightInfoEmbed, buildAllocationEmbed } = require('../utils/embed');
+var ids = require('../config/ids');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -13,26 +12,31 @@ module.exports = {
         if (interaction.guildId !== '1309560657473179679') {
             return interaction.reply({ content: '\u274C This command can only be used in the United Volare server.', flags: [4096] });
         }
-        // Find flights where this user is allocated
-        const flights = await Flight.find({
+        var flights = await Flight.find({
             status: 'scheduled',
             'allocations.userId': interaction.user.id,
         }).sort({ serverOpenTime: 1 });
 
         if (flights.length === 0) {
-            return interaction.reply({ content: '❌ You are not allocated to any flights.', flags: [4096] });
+            return interaction.reply({ content: '\u274C You are not allocated to any flights.', flags: [4096] });
         }
 
-        const options = flights.slice(0, 25).map(f => {
-            const alloc = f.allocations.find(a => a.userId === interaction.user.id);
+        var options = flights.slice(0, 25).map(function(f) {
+            var alloc = f.allocations.find(function(a) { return a.userId === interaction.user.id; });
+            var date = new Date(f.serverOpenTime * 1000);
+            var dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            var timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+            var prefix = '';
+            if (f.flightType === 'test') prefix = '[TEST] ';
+            if (f.flightType === 'premium') prefix = '[PREMIUM] ';
             return {
-                label: `${f.flightNumber} — ${alloc.position}`,
-                description: `${f.departure} ➜ ${f.destination}`,
-                value: f.flightNumber,
+                label: prefix + f.flightNumber + ' \u2014 ' + alloc.position,
+                description: f.departure + ' \u27A1 ' + f.destination + ' \u2022 ' + dateStr + ' at ' + timeStr,
+                value: f._id.toString(),
             };
         });
 
-        const select = new StringSelectMenuBuilder()
+        var select = new StringSelectMenuBuilder()
             .setCustomId('unallocate_flight')
             .setPlaceholder('Select the flight to unallocate from')
             .addOptions(options);
@@ -45,36 +49,33 @@ module.exports = {
     },
 
     async handleFlightSelect(interaction) {
-        const flightNumber = interaction.values[0];
-        const flight = await Flight.findOne({ flightNumber, status: 'scheduled' });
-        if (!flight) return interaction.update({ content: '❌ Flight not found.', components: [] });
+        var flightId = interaction.values[0];
+        var flight = await Flight.findById(flightId);
+        if (!flight || flight.status !== 'scheduled') return interaction.update({ content: '\u274C Flight not found.', components: [] });
 
-        const allocIndex = flight.allocations.findIndex(a => a.userId === interaction.user.id);
+        var allocIndex = flight.allocations.findIndex(function(a) { return a.userId === interaction.user.id; });
         if (allocIndex === -1) {
-            return interaction.update({ content: '❌ You are not allocated to this flight.', components: [] });
+            return interaction.update({ content: '\u274C You are not allocated to this flight.', components: [] });
         }
 
-        const removed = flight.allocations[allocIndex];
+        var removed = flight.allocations[allocIndex];
         flight.allocations.splice(allocIndex, 1);
         await flight.save();
 
-        // Update forum embed
         try {
             if (flight.forumThreadId && flight.forumMessageId) {
-                const guild = interaction.client.guilds.cache.get(ids.STAFF_SERVER_ID);
-                const thread = guild?.channels.cache.get(flight.forumThreadId)
-                    || await guild?.channels.fetch(flight.forumThreadId).catch(() => null);
+                var guild = interaction.client.guilds.cache.get(ids.STAFF_SERVER_ID);
+                var thread = guild ? guild.channels.cache.get(flight.forumThreadId) : null;
+                if (!thread && guild) thread = await guild.channels.fetch(flight.forumThreadId).catch(function() { return null; });
                 if (thread) {
-                    const msg = await thread.messages.fetch(flight.forumMessageId).catch(() => null);
-                    if (msg) {
-                        await msg.edit({ embeds: [buildFlightInfoEmbed(flight), buildAllocationEmbed(flight)] });
-                    }
+                    var msg = await thread.messages.fetch(flight.forumMessageId).catch(function() { return null; });
+                    if (msg) await msg.edit({ embeds: [buildFlightInfoEmbed(flight), buildAllocationEmbed(flight)] });
                 }
             }
         } catch (err) { console.error('[Unallocate] Forum update error:', err); }
 
         await interaction.update({
-            content: `✅ You have been removed as **${removed.position}** from flight **${flightNumber}**.`,
+            content: '\u2705 You have been removed as **' + removed.position + '** from flight **' + flight.flightNumber + '**.',
             components: [],
         });
     },
