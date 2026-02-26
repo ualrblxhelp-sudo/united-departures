@@ -87,7 +87,7 @@ async function updateCalendar(client) {
 // Staff calendar - ALL FLIGHTS (regular + premium + test)
 async function updateStaffCalendar(client) {
     try {
-        var guild = client.guilds.cache.get(ids.STAFF_SERVER_ID);
+        var guild = client.guilds.cache.get(ids.CALENDAR_SERVER_ID);
         if (!guild) return;
         var channel = guild.channels.cache.get(ids.STAFF_CALENDAR_CHANNEL_ID);
         if (!channel) return;
