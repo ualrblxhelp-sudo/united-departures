@@ -104,15 +104,15 @@ module.exports = {
             flight.destination = destination;
             changes.push('Destination \u2192 ' + destination);
         }
-        if (ejRaw && !isNaN(parseInt(ejRaw))) {
-            var ej = parseInt(ejRaw);
+        if (ejRaw) {
+            var ej = parseTimestamp(ejRaw);
             if (ej !== flight.employeeJoinTime) {
                 flight.employeeJoinTime = ej;
                 changes.push('Staff Join \u2192 <t:' + ej + ':F>');
             }
         }
-        if (soRaw && !isNaN(parseInt(soRaw))) {
-            var so = parseInt(soRaw);
+        if (soRaw) {
+            var so = parseTimestamp(soRaw);
             if (so !== flight.serverOpenTime) {
                 flight.serverOpenTime = so;
                 changes.push('Server Open \u2192 <t:' + so + ':F>');
