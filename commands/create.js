@@ -75,8 +75,8 @@ module.exports = {
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('flight_number').setLabel('Flight Number (e.g. UA 1234)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10)),
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('departure').setLabel('IATA Departure (e.g. EWR)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(4)),
             new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('destination').setLabel('IATA Destination (e.g. LAX)').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(4)),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('employee_join_time').setLabel('Employee Join Time (Unix timestamp)').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('Use discordtimestamp.com to generate')),
-            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_open_time').setLabel('Server Open Time (Unix timestamp)').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('Use discordtimestamp.com to generate')),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('employee_join_time').setLabel('Employee Join Time').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('e.g. <t:1772089560:f> or 1772089560')),
+            new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('server_open_time').setLabel('Server Open Time').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('e.g. <t:1772089560:f> or 1772089560')),
         );
         await interaction.showModal(modal);
     },
