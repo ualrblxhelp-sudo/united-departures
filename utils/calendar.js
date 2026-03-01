@@ -12,7 +12,6 @@ function buildCalendarDescription(flights, skipHeader) {
         return '<:UnitedCurve:1297074894164463628> Below are scheduled, upcoming departures operated by United Airlines and its subsidiaries.\n\n*No flights currently scheduled.*';
     }
     var desc = skipHeader ? '' : '<:UnitedCurve:1297074894164463628> Below are scheduled, upcoming departures operated by United Airlines and its subsidiaries.\n\n';
-    var now = Math.floor(Date.now() / 1000);
     var todayStart = getTodayStartUnix();
     var todayEnd = todayStart + 86400;
     var todayFlights = flights.filter(function(f) { return f.serverOpenTime >= todayStart && f.serverOpenTime < todayEnd; });
@@ -51,7 +50,7 @@ function getTodayStartUnix() {
 
 async function findOrCreateBotMessage(client, channel, ref, title) {
     if (ref) {
-        try { await ref.edit({ content: '' }); return ref; } catch (e) { /* message deleted */ }
+        try { await ref.edit({ content: '' }); return ref; } catch (e) {}
     }
     var recent = await channel.messages.fetch({ limit: 20 });
     var found = recent.find(function(m) {
@@ -70,9 +69,9 @@ async function updateCalendar(client) {
 
         var flights = await Flight.find({ status: 'scheduled', flightType: 'regular' }).sort({ serverOpenTime: 1 });
         var embed = new EmbedBuilder()
-            .setTitle('<:e_plane:1397829563249328138> Premium Departures')
-            .setColor(0x2596be)
-            .setDescription('<:UnitedCurve:1297074894164463628> Below are scheduled, upcoming premium, private departures operated by United Airlines and its subsidiaries.\n\n' + (flights.length === 0 ? '*No flights currently scheduled.*' : buildCalendarDescription(flights, true)))
+            .setTitle('<:e_plane:1397829563249328138> Scheduled Departures')
+            .setColor(ids.EMBED_COLOR)
+            .setDescription(buildCalendarDescription(flights))
             .setTimestamp()
             .setFooter({ text: 'United Airlines \u2022 Auto-updated' });
 
@@ -88,7 +87,7 @@ async function updateCalendar(client) {
 // Staff calendar - ALL FLIGHTS (regular + premium + test)
 async function updateStaffCalendar(client) {
     try {
-        var guild = client.guilds.cache.get(ids.CALENDAR_SERVER_ID);
+        var guild = client.guilds.cache.get(ids.STAFF_SERVER_ID);
         if (!guild) return;
         var channel = guild.channels.cache.get(ids.STAFF_CALENDAR_CHANNEL_ID);
         if (!channel) return;
@@ -120,9 +119,9 @@ async function updatePremiumCalendar(client) {
 
         var flights = await Flight.find({ status: 'scheduled', flightType: 'premium' }).sort({ serverOpenTime: 1 });
         var embed = new EmbedBuilder()
-            .setTitle('\u2B50 Premium Departures')
-            .setColor(0xDAA520)
-            .setDescription(buildCalendarDescription(flights))
+            .setTitle('<:e_plane:1397829563249328138> Premium Departures')
+            .setColor(0x2596be)
+            .setDescription('<:UnitedCurve:1297074894164463628> Below are scheduled, upcoming premium, private departures operated by United Airlines and its subsidiaries.\n\n' + (flights.length === 0 ? '*No flights currently scheduled.*' : buildCalendarDescription(flights, true)))
             .setTimestamp()
             .setFooter({ text: 'United Airlines \u2022 Premium Flights \u2022 Auto-updated' });
 
