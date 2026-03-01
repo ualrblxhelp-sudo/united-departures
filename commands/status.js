@@ -59,7 +59,7 @@ module.exports = {
         if (!player) {
             return interaction.reply({
                 content: 'Your Discord is not linked to a Roblox account. Use `/link` first.',
-                flags: [4096],
+                ephemeral: true,
             });
         }
 
@@ -134,6 +134,6 @@ module.exports = {
         embed.setDescription(desc);
         embed.setFooter({ text: 'United MileagePlus \u2022 Linked to ' + (player.username || 'Unknown') });
         embed.setTimestamp();
-        return interaction.reply({ embeds: [embed], flags: [4096] });
+        return interaction.reply({ embeds: [embed], ephemeral: true });
     },
 };

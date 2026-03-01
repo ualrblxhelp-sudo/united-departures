@@ -7,6 +7,14 @@ var { buildFlightInfoEmbed, buildAllocationEmbed } = require('../utils/embed');
 var { updateAllCalendars } = require('../utils/calendar');
 var ids = require('../config/ids');
 
+function parseTimestamp(input) {
+    var match = input.match(/<t:(\d+)(?::[tTdDfFR])?>/);
+    if (match) return parseInt(match[1]);
+    var num = parseInt(input);
+    if (!isNaN(num)) return num;
+    return NaN;
+}
+
 var pendingEdits = new Map();
 
 module.exports = {
@@ -17,12 +25,12 @@ module.exports = {
 
     async execute(interaction) {
         if (!interaction.member.roles.cache.has(ids.FLIGHT_HOST_ROLE_ID)) {
-            return interaction.reply({ content: '\u274C You need the Flight Host role.', flags: [4096] });
+            return interaction.reply({ content: '\u274C You need the Flight Host role.', ephemeral: true });
         }
 
         var flights = await Flight.find({ status: 'scheduled' }).sort({ serverOpenTime: 1 });
         if (flights.length === 0) {
-            return interaction.reply({ content: '\u274C No scheduled flights to edit.', flags: [4096] });
+            return interaction.reply({ content: '\u274C No scheduled flights to edit.', ephemeral: true });
         }
 
         var options = flights.slice(0, 25).map(function(f) {
@@ -47,7 +55,7 @@ module.exports = {
         await interaction.reply({
             content: 'Select the flight you want to edit:',
             components: [new ActionRowBuilder().addComponents(select)],
-            flags: [4096],
+            ephemeral: true,
         });
     },
 
@@ -84,10 +92,10 @@ module.exports = {
 
     async handleModalSubmit(interaction) {
         var flightId = pendingEdits.get(interaction.user.id);
-        if (!flightId) return interaction.reply({ content: '\u274C Session expired. Use `/edit` again.', flags: [4096] });
+        if (!flightId) return interaction.reply({ content: '\u274C Session expired. Use `/edit` again.', ephemeral: true });
 
         var flight = await Flight.findById(flightId);
-        if (!flight) return interaction.reply({ content: '\u274C Flight not found.', flags: [4096] });
+        if (!flight) return interaction.reply({ content: '\u274C Flight not found.', ephemeral: true });
 
         var departure = interaction.fields.getTextInputValue('departure').toUpperCase().trim();
         var destination = interaction.fields.getTextInputValue('destination').toUpperCase().trim();
@@ -120,7 +128,7 @@ module.exports = {
         }
 
         if (changes.length === 0) {
-            return interaction.reply({ content: '\u26A0\uFE0F No changes detected.', flags: [4096] });
+            return interaction.reply({ content: '\u26A0\uFE0F No changes detected.', ephemeral: true });
         }
 
         await flight.save();
@@ -143,7 +151,7 @@ module.exports = {
         pendingEdits.delete(interaction.user.id);
         await interaction.reply({
             content: '\u2705 Flight **' + flight.flightNumber + '** updated:\n' + changes.map(function(c) { return '\u2022 ' + c; }).join('\n'),
-            flags: [4096],
+            ephemeral: true,
         });
     },
 };

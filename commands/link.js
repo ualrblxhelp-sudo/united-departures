@@ -30,27 +30,27 @@ module.exports = {
         if (existingLink) {
             return interaction.reply({
                 content: 'Your Discord is already linked to **' + existingLink.username + '**. Use `/unlink` first to change it.',
-                flags: [4096],
+                ephemeral: true,
             });
         }
         var player = await PM.findOne({ username: { $regex: new RegExp('^' + username + '$', 'i') } });
         if (!player) {
             return interaction.reply({
                 content: 'Roblox account **' + username + '** not found in our system. You need to join a United flight to configure your profile.',
-                flags: [4096],
+                ephemeral: true,
             });
         }
         if (player.discordId && player.discordId !== interaction.user.id) {
             return interaction.reply({
                 content: 'That Roblox account is already linked to another Discord user.',
-                flags: [4096],
+                ephemeral: true,
             });
         }
         player.discordId = interaction.user.id;
         await player.save();
         return interaction.reply({
             content: 'Linked your Discord to **' + player.username + '**! Use `/status` to view your MileagePlus profile.',
-            flags: [4096],
+            ephemeral: true,
         });
     },
 };

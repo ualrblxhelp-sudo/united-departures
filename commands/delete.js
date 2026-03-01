@@ -16,12 +16,12 @@ module.exports = {
 
     async execute(interaction) {
         if (!interaction.member.roles.cache.has(ids.FLIGHT_HOST_ROLE_ID)) {
-            return interaction.reply({ content: '\u274C You need the Flight Host role.', flags: [4096] });
+            return interaction.reply({ content: '\u274C You need the Flight Host role.', ephemeral: true });
         }
 
         var flights = await Flight.find({ status: 'scheduled' }).sort({ serverOpenTime: 1 });
         if (flights.length === 0) {
-            return interaction.reply({ content: '\u274C No scheduled flights to delete.', flags: [4096] });
+            return interaction.reply({ content: '\u274C No scheduled flights to delete.', ephemeral: true });
         }
 
         var options = flights.slice(0, 25).map(function(f) {
@@ -46,7 +46,7 @@ module.exports = {
         await interaction.reply({
             content: 'Select the flight you want to delete:',
             components: [new ActionRowBuilder().addComponents(select)],
-            flags: [4096],
+            ephemeral: true,
         });
     },
 

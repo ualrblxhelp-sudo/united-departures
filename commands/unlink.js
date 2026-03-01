@@ -17,14 +17,14 @@ module.exports = {
         if (!player) {
             return interaction.reply({
                 content: 'Your Discord is not linked to any Roblox account.',
-                flags: [4096],
+                ephemeral: true,
             });
         }
         player.discordId = null;
         await player.save();
         return interaction.reply({
             content: 'Unlinked your Discord from **' + player.username + '**.',
-            flags: [4096],
+            ephemeral: true,
         });
     },
 };

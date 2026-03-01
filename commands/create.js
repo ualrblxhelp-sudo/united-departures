@@ -32,7 +32,7 @@ module.exports = {
 
     async execute(interaction) {
         if (!interaction.member.roles.cache.has(ids.FLIGHT_HOST_ROLE_ID)) {
-            return interaction.reply({ content: '\u274C You need the Flight Host role.', flags: [4096] });
+            return interaction.reply({ content: '\u274C You need the Flight Host role.', ephemeral: true });
         }
         var select = new StringSelectMenuBuilder()
             .setCustomId('create_type')
@@ -45,7 +45,7 @@ module.exports = {
         await interaction.reply({
             content: '**Step 1/4** \u2014 Select the flight type:',
             components: [new ActionRowBuilder().addComponents(select)],
-            flags: [4096],
+            ephemeral: true,
         });
     },
 
@@ -83,7 +83,7 @@ module.exports = {
 
     async handleModalSubmit(interaction) {
         var pending = pendingCreations.get(interaction.user.id);
-        if (!pending || !pending.aircraft) return interaction.reply({ content: '\u274C Session expired. Use `/create` again.', flags: [4096] });
+        if (!pending || !pending.aircraft) return interaction.reply({ content: '\u274C Session expired. Use `/create` again.', ephemeral: true });
 
         var flightNumber = interaction.fields.getTextInputValue('flight_number').toUpperCase().trim();
         var departure = interaction.fields.getTextInputValue('departure').toUpperCase().trim();
@@ -92,10 +92,10 @@ module.exports = {
         var serverOpenTime = parseTimestamp(interaction.fields.getTextInputValue('server_open_time').trim());
 
         if (isNaN(employeeJoinTime) || isNaN(serverOpenTime)) {
-            return interaction.reply({ content: '\u274C Invalid timestamps. Use Unix timestamps.', flags: [4096] });
+            return interaction.reply({ content: '\u274C Invalid timestamps. Use Unix timestamps.', ephemeral: true });
         }
         if (!/^[A-Z]{3}$/.test(departure) || !/^[A-Z]{3}$/.test(destination)) {
-            return interaction.reply({ content: '\u274C IATA codes must be exactly 3 letters.', flags: [4096] });
+            return interaction.reply({ content: '\u274C IATA codes must be exactly 3 letters.', ephemeral: true });
         }
 
         pending.flightNumber = flightNumber;
@@ -126,7 +126,7 @@ module.exports = {
             new ButtonBuilder().setCustomId('create_confirm').setLabel('Confirm & Create').setStyle(ButtonStyle.Success).setEmoji('\u2705'),
             new ButtonBuilder().setCustomId('create_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji('\u274C'),
         );
-        await interaction.reply({ content: '**Step 4/4** \u2014 Review and confirm:', embeds: [embed], components: [row], flags: [4096] });
+        await interaction.reply({ content: '**Step 4/4** \u2014 Review and confirm:', embeds: [embed], components: [row], ephemeral: true });
     },
 
     async handleConfirm(interaction) {

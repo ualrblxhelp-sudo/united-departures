@@ -10,7 +10,7 @@ module.exports = {
 
     async execute(interaction) {
         if (interaction.guildId !== '1309560657473179679') {
-            return interaction.reply({ content: '\u274C This command can only be used in the United Volare server.', flags: [4096] });
+            return interaction.reply({ content: '\u274C This command can only be used in the United Volare server.', ephemeral: true });
         }
         var flights = await Flight.find({
             status: 'scheduled',
@@ -18,7 +18,7 @@ module.exports = {
         }).sort({ serverOpenTime: 1 });
 
         if (flights.length === 0) {
-            return interaction.reply({ content: '\u274C You are not allocated to any flights.', flags: [4096] });
+            return interaction.reply({ content: '\u274C You are not allocated to any flights.', ephemeral: true });
         }
 
         var options = flights.slice(0, 25).map(function(f) {
@@ -44,7 +44,7 @@ module.exports = {
         await interaction.reply({
             content: 'Select the flight you want to remove yourself from:',
             components: [new ActionRowBuilder().addComponents(select)],
-            flags: [4096],
+            ephemeral: true,
         });
     },
 

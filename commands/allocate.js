@@ -13,11 +13,11 @@ module.exports = {
 
     async execute(interaction) {
         if (interaction.guildId !== '1309560657473179679') {
-            return interaction.reply({ content: '\u274C This command can only be used in the United Volare server.', flags: [4096] });
+            return interaction.reply({ content: '\u274C This command can only be used in the United Volare server.', ephemeral: true });
         }
         var flights = await Flight.find({ status: 'scheduled' }).sort({ serverOpenTime: 1 });
         if (flights.length === 0) {
-            return interaction.reply({ content: '\u274C No scheduled flights available.', flags: [4096] });
+            return interaction.reply({ content: '\u274C No scheduled flights available.', ephemeral: true });
         }
 
         var options = flights.slice(0, 25).map(function(f) {
@@ -42,7 +42,7 @@ module.exports = {
         await interaction.reply({
             content: '**Step 1/2** \u2014 Select the flight you want to allocate for:',
             components: [new ActionRowBuilder().addComponents(select)],
-            flags: [4096],
+            ephemeral: true,
         });
     },
 
