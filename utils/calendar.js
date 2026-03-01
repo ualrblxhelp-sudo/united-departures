@@ -6,11 +6,12 @@ var calendarMessageRef = null;
 var staffCalendarRef = null;
 var premiumCalendarRef = null;
 
-function buildCalendarDescription(flights, label) {
+function buildCalendarDescription(flights, skipHeader) {
     if (flights.length === 0) {
+        if (skipHeader) return '*No flights currently scheduled.*';
         return '<:UnitedCurve:1297074894164463628> Below are scheduled, upcoming departures operated by United Airlines and its subsidiaries.\n\n*No flights currently scheduled.*';
     }
-    var desc = '<:UnitedCurve:1297074894164463628> Below are scheduled, upcoming departures operated by United Airlines and its subsidiaries.\n\n';
+    var desc = skipHeader ? '' : '<:UnitedCurve:1297074894164463628> Below are scheduled, upcoming departures operated by United Airlines and its subsidiaries.\n\n';
     var now = Math.floor(Date.now() / 1000);
     var todayStart = getTodayStartUnix();
     var todayEnd = todayStart + 86400;
