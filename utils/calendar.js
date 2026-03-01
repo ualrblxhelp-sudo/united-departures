@@ -112,7 +112,7 @@ async function updateStaffCalendar(client) {
 // Premium calendar - PREMIUM ONLY
 async function updatePremiumCalendar(client) {
     try {
-        var guild = client.guilds.cache.get(ids.STAFF_SERVER_ID);
+        var guild = client.guilds.cache.get(ids.CALENDAR_SERVER_ID);
         if (!guild) return;
         var channel = guild.channels.cache.get(ids.PREMIUM_CALENDAR_CHANNEL_ID);
         if (!channel) return;
