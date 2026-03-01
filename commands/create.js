@@ -179,6 +179,7 @@ module.exports = {
         // Create Discord scheduled event
         // Regular + Premium -> main server, Test -> staff server only
         try {
+            if (p.flightType === 'premium') throw 'skip';
             var eventServerId = (p.flightType === 'test') ? ids.STAFF_SERVER_ID : ids.CALENDAR_SERVER_ID;
             var eventGuild = interaction.client.guilds.cache.get(eventServerId);
             if (eventGuild) {
