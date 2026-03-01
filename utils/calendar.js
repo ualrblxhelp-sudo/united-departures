@@ -69,9 +69,9 @@ async function updateCalendar(client) {
 
         var flights = await Flight.find({ status: 'scheduled', flightType: 'regular' }).sort({ serverOpenTime: 1 });
         var embed = new EmbedBuilder()
-            .setTitle('<:e_plane:1397829563249328138> Scheduled Departures')
-            .setColor(ids.EMBED_COLOR)
-            .setDescription(buildCalendarDescription(flights))
+            .setTitle('<:e_plane:1397829563249328138> Premium Departures')
+            .setColor(0x2596be)
+            .setDescription('<:UnitedCurve:1297074894164463628> Below are scheduled, upcoming premium, private departures operated by United Airlines and its subsidiaries.\n\n' + (flights.length === 0 ? '*No flights currently scheduled.*' : buildCalendarDescription(flights, true)))
             .setTimestamp()
             .setFooter({ text: 'United Airlines \u2022 Auto-updated' });
 
