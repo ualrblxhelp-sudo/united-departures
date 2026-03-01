@@ -53,6 +53,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (id === 'edit_flight') {
                 return await client.commands.get('edit').handleFlightSelect(interaction);
             }
+            if (id === 'end_flight') {
+                return await client.commands.get('end').handleFlightSelect(interaction);
+            }
             return;
             return;
         }
@@ -81,6 +84,12 @@ client.on(Events.InteractionCreate, async function(interaction) {
             }
             if (bid === 'delete_cancel') {
                 return await client.commands.get('delete').handleCancel(interaction);
+            }
+            if (bid === 'end_confirm') {
+                return await client.commands.get('end').handleConfirm(interaction);
+            }
+            if (bid === 'end_cancel') {
+                return await client.commands.get('end').handleCancel(interaction);
             }
             return;
         }
