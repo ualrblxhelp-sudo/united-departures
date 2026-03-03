@@ -66,7 +66,7 @@ module.exports = {
         var timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
         var row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('end_confirm').setLabel('End Flight').setStyle(ButtonStyle.Danger).setEmoji('\u2705'),
+            new ButtonBuilder().setCustomId('end_confirm').setLabel('End Flight').setStyle(ButtonStyle.Danger).setEmoji({ id: '1408484391348605069', name: 'volare_check' }),
             new ButtonBuilder().setCustomId('end_cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
         );
 
@@ -130,7 +130,7 @@ module.exports = {
 
         pendingEnds.delete(interaction.user.id);
         await interaction.editReply({
-            content: '\u2705 Flight **' + flight.flightNumber + '** (' + flight.departure + ' \u27A1 ' + flight.destination + ') has been completed.',
+            content: '<:volare_check:1408484391348605069> Flight **' + flight.flightNumber + '** (' + flight.departure + ' \u27A1 ' + flight.destination + ') has been completed.',
             components: [],
         });
     },
