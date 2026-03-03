@@ -141,7 +141,7 @@ module.exports = {
         } catch (err) { console.error('[Allocate] Forum update error:', err); }
 
         await interaction.update({
-            content: '\u2705 You have been allocated as **' + position + '** on flight **' + flight.flightNumber + '** (' + flight.departure + ' \u27A1 ' + flight.destination + '). Use `/unallocate` if you become unavailable.',
+            content: '<:volare_check:1408484391348605069> You have been allocated as **' + position + '** on flight **' + flight.flightNumber + '** (' + flight.departure + ' \u27A1 ' + flight.destination + '). Use `/unallocate` if you become unavailable.',
             components: [],
         });
     },
