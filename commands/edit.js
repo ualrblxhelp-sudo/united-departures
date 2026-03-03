@@ -150,7 +150,7 @@ module.exports = {
 
         pendingEdits.delete(interaction.user.id);
         await interaction.reply({
-            content: '\u2705 Flight **' + flight.flightNumber + '** updated:\n' + changes.map(function(c) { return '\u2022 ' + c; }).join('\n'),
+            content: '<:volare_check:1408484391348605069> Flight **' + flight.flightNumber + '** updated:\n' + changes.map(function(c) { return '\u2022 ' + c; }).join('\n'),
             ephemeral: true,
         });
     },
