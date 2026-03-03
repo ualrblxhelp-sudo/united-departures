@@ -75,7 +75,7 @@ module.exports = {
         } catch (err) { console.error('[Unallocate] Forum update error:', err); }
 
         await interaction.update({
-            content: '\u2705 You have been removed as **' + removed.position + '** from flight **' + flight.flightNumber + '**.',
+            content: '<:volare_check:1408484391348605069> You have been removed as **' + removed.position + '** from flight **' + flight.flightNumber + '**.',
             components: [],
         });
     },
