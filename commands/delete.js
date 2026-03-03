@@ -136,7 +136,7 @@ module.exports = {
 
         pendingDeletes.delete(interaction.user.id);
         await interaction.editReply({
-            content: '\u2705 Flight **' + flight.flightNumber + '** has been deleted and archived.',
+            content: '<:volare_check:1408484391348605069> Flight **' + flight.flightNumber + '** has been deleted and archived.',
             components: [],
         });
     },
