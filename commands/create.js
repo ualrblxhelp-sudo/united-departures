@@ -5,7 +5,7 @@ const {
 var Flight = require('../models/Flight');
 var { getAircraftChoices, AIRCRAFT } = require('../config/aircraft');
 var { buildFlightInfoEmbed, buildAllocationEmbed } = require('../utils/embed');
-var { updateAllCalendars, announceNewFlight } = require('../utils/calendar');
+var { updateAllCalendars } = require('../utils/calendar');
 var ids = require('../config/ids');
 
 function parseTimestamp(input) {
@@ -173,9 +173,7 @@ module.exports = {
         // Update all calendars (each filters by type internally)
         try { await updateAllCalendars(interaction.client); } catch (err) { console.error('[Create] Calendar error:', err); }
 
-        // Announce
-        try { await announceNewFlight(interaction.client, flight); } catch (err) { console.error('[Create] Announce error:', err); }
-
+    
         // Create Discord scheduled event
         // Regular + Premium -> main server, Test -> staff server only
         try {
