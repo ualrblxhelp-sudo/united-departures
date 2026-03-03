@@ -38,8 +38,14 @@ function buildCalendarDescription(flights, skipHeader) {
 function formatFlightLine(flight) {
     var emoji = '<:UATail2:1076723231391744050>';
     var prefix = '';
-    if (flight.flightType === 'test') prefix = '[TEST] ';
-    if (flight.flightType === 'premium') prefix = '\u2B50 ';
+    if (flight.flightType === 'test') {
+        emoji = '<:e_structure:1397829560782946445>';
+        prefix = '[TEST] ';
+    }
+    if (flight.flightType === 'premium') {
+        emoji = '<:UnitedGlobalServices:1298320156342358088>';
+        prefix = '';
+    }
     return emoji + ' **' + prefix + flight.flightNumber + '** | ' + flight.departure + ' \u27A1 ' + flight.destination + ' | <t:' + flight.serverOpenTime + ':F>\n';
 }
 
