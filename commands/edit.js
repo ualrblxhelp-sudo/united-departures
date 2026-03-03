@@ -35,7 +35,7 @@ module.exports = {
 
         var options = flights.slice(0, 25).map(function(f) {
             var date = new Date(f.serverOpenTime * 1000);
-            var dateStr = date.toLocaleDateString('en-US', { month: 'Short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+            var dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
             var timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
             var prefix = '';
             if (f.flightType === 'test') prefix = '[TEST] ';
