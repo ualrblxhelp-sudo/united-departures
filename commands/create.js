@@ -123,7 +123,7 @@ module.exports = {
             );
 
         var row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('create_confirm').setLabel('Confirm & Create').setStyle(ButtonStyle.Success).setEmoji('\u2705'),
+            new ButtonBuilder().setCustomId('create_confirm').setLabel('Confirm & Create').setStyle(ButtonStyle.Success).setEmoji({ id: '1408484391348605069', name: 'volare_check' }),
             new ButtonBuilder().setCustomId('create_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger).setEmoji('\u274C'),
         );
         await interaction.reply({ content: '**Step 4/4** \u2014 Review and confirm:', embeds: [embed], components: [row], ephemeral: true });
@@ -212,7 +212,7 @@ module.exports = {
 
         pendingCreations.delete(interaction.user.id);
         await interaction.editReply({
-            content: '\u2705 ' + typeInfo.label + ' **' + p.flightNumber + '** (' + p.departure + ' \u27A1 ' + p.destination + ') created!',
+            content: '<:volare_check:1408484391348605069> ' + typeInfo.label + ' **' + p.flightNumber + '** (' + p.departure + ' \u27A1 ' + p.destination + ') created!',
             embeds: [], components: [],
         });
     },
