@@ -53,6 +53,12 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (id === 'edit_flight') {
                 return await client.commands.get('edit').handleFlightSelect(interaction);
             }
+            if (id === 'edit_action') {
+                return await client.commands.get('edit').handleActionSelect(interaction);
+            }
+            if (id === 'edit_unallocate_crew') {
+                return await client.commands.get('edit').handleUnallocateCrew(interaction);
+            }
             if (id === 'end_flight') {
                 return await client.commands.get('end').handleFlightSelect(interaction);
             }
@@ -67,6 +73,12 @@ client.on(Events.InteractionCreate, async function(interaction) {
             }
             if (mid === 'edit_modal') {
                 return await client.commands.get('edit').handleModalSubmit(interaction);
+            }
+            if (mid === 'edit_transfer_modal') {
+                return await client.commands.get('edit').handleTransferModal(interaction);
+            }
+            if (mid === 'edit_replace_modal') {
+                return await client.commands.get('edit').handleReplaceModal(interaction);
             }
             return;
         }
@@ -90,6 +102,15 @@ client.on(Events.InteractionCreate, async function(interaction) {
             }
             if (bid === 'end_cancel') {
                 return await client.commands.get('end').handleCancel(interaction);
+            }
+            if (bid === 'edit_replace_yes') {
+                return await client.commands.get('edit').handleReplaceYes(interaction);
+            }
+            if (bid === 'edit_replace_no') {
+                return await client.commands.get('edit').handleReplaceNo(interaction);
+            }
+            if (bid === 'edit_replace_cancel') {
+                return await client.commands.get('edit').handleReplaceCancel(interaction);
             }
             return;
         }
