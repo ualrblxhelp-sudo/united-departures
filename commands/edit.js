@@ -84,13 +84,7 @@ module.exports = {
     },
 
     // Action select
-    async handleActionSelect(interaction) {modal.addComponents(
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('flight_number').setLabel('Flight Number').setStyle(TextInputStyle.Short).setRequired(false).setValue(flight.flightNumber).setMaxLength(10)
-                ),
-                new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('departure').setLabel('IATA Departure').setStyle(TextInputStyle.Short).setRequired(false).setValue(flight.departure).setMaxLength(4)
-                ),
+    async handleActionSelect(interaction) {
         var pending = pendingEdits.get(interaction.user.id);
         if (!pending) return interaction.update({ content: '\u274C Session expired. Use `/edit` again.', components: [] });
 
@@ -105,6 +99,9 @@ module.exports = {
                 .setCustomId('edit_modal')
                 .setTitle('Edit ' + flight.flightNumber);
             modal.addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('flight_number').setLabel('Flight Number').setStyle(TextInputStyle.Short).setRequired(false).setValue(flight.flightNumber).setMaxLength(10)
+                ),
                 new ActionRowBuilder().addComponents(
                     new TextInputBuilder().setCustomId('departure').setLabel('IATA Departure').setStyle(TextInputStyle.Short).setRequired(false).setValue(flight.departure).setMaxLength(4)
                 ),
