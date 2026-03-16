@@ -84,7 +84,13 @@ module.exports = {
     },
 
     // Action select
-    async handleActionSelect(interaction) {
+    async handleActionSelect(interaction) {modal.addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('flight_number').setLabel('Flight Number').setStyle(TextInputStyle.Short).setRequired(false).setValue(flight.flightNumber).setMaxLength(10)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('departure').setLabel('IATA Departure').setStyle(TextInputStyle.Short).setRequired(false).setValue(flight.departure).setMaxLength(4)
+                ),
         var pending = pendingEdits.get(interaction.user.id);
         if (!pending) return interaction.update({ content: '\u274C Session expired. Use `/edit` again.', components: [] });
 
@@ -326,6 +332,7 @@ module.exports = {
         var flight = await Flight.findById(pending.flightId);
         if (!flight) return interaction.reply({ content: '\u274C Flight not found.', ephemeral: true });
 
+        var flightNumber = interaction.fields.getTextInputValue('flight_number').toUpperCase().trim();
         var departure = interaction.fields.getTextInputValue('departure').toUpperCase().trim();
         var destination = interaction.fields.getTextInputValue('destination').toUpperCase().trim();
         var ejRaw = interaction.fields.getTextInputValue('employee_join_time').trim();
@@ -333,6 +340,11 @@ module.exports = {
 
         var changes = [];
 
+        if (flightNumber && flightNumber !== flight.flightNumber) {
+            flight.flightNumber = flightNumber;
+            changes.push('Flight Number \u2192 ' + flightNumber);
+        }
+        
         if (departure && /^[A-Z]{3}$/.test(departure) && departure !== flight.departure) {
             flight.departure = departure;
             changes.push('Departure \u2192 ' + departure);
