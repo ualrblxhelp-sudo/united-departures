@@ -372,8 +372,54 @@ module.exports = {
         await flight.save();
         await updateForumEmbed(interaction.client, flight);
 
-        try { await updateAllCalendars(interaction.client); } catch (err) { console.error('[Edit] Calendar error:', err); }
+       try { await updateAllCalendars(interaction.client); } catch (err) { console.error('[Edit] Calendar error:', err); }
 
+        // Update Discord scheduled event
+        try {
+            if (flight.discordEventId) {
+                var servers = [ids.CALENDAR_SERVER_ID, ids.STAFF_SERVER_ID];
+                for (var s = 0; s < servers.length; s++) {
+                    var evGuild = interaction.client.guilds.cache.get(servers[s]);
+                    if (evGuild) {
+                        var event = await evGuild.scheduledEvents.fetch(flight.discordEventId).catch(function() { return null; });
+                        if (event) {
+                            var prefix = '';
+                            if (flight.flightType === 'test') prefix = '[TEST] ';
+                            if (flight.flightType === 'premium') prefix = '[PREMIUM] ';
+                            var startTime = new Date(flight.serverOpenTime * 1000);
+                            var endTime = new Date((flight.serverOpenTime + 3600) * 1000);
+                            await event.edit({
+                                name: prefix + flight.flightNumber + ' | ' + flight.departure + ' \u27A1 ' + flight.destination,
+                                scheduledStartTime: startTime,
+                                scheduledEndTime: endTime,
+                                description: 'Dispatcher - <@' + flight.dispatcherId + '>\nFlight Number - ' + flight.flightNumber + '\nIATA Route - ' + flight.departure + ' to ' + flight.destination + '\nAircraft - ' + flight.aircraft,
+                            });
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (err) { console.error('[Edit] Event update error:', err); }
+
+        // Update Discord event with new dispatcher
+        try {
+            if (flight.discordEventId) {
+                var servers = [ids.CALENDAR_SERVER_ID, ids.STAFF_SERVER_ID];
+                for (var s = 0; s < servers.length; s++) {
+                    var evGuild = interaction.client.guilds.cache.get(servers[s]);
+                    if (evGuild) {
+                        var event = await evGuild.scheduledEvents.fetch(flight.discordEventId).catch(function() { return null; });
+                        if (event) {
+                            await event.edit({
+                                description: 'Dispatcher - <@' + flight.dispatcherId + '>\nFlight Number - ' + flight.flightNumber + '\nIATA Route - ' + flight.departure + ' to ' + flight.destination + '\nAircraft - ' + flight.aircraft,
+                            });
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (err) { console.error('[Edit] Transfer event error:', err); }
+        
         pendingEdits.delete(interaction.user.id);
         await interaction.reply({
             content: '<:volare_check:1408484391348605069> Flight **' + flight.flightNumber + '** updated:\n' + changes.map(function(c) { return '\u2022 ' + c; }).join('\n'),
