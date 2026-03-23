@@ -62,6 +62,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (id === 'end_flight') {
                 return await client.commands.get('end').handleFlightSelect(interaction);
             }
+            if (id === 'bugreport_type') {
+                return await client.commands.get('bugreport').handleTypeSelect(interaction);
+            }
             return;
             return;
         }
@@ -79,6 +82,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             }
             if (mid === 'edit_replace_modal') {
                 return await client.commands.get('edit').handleReplaceModal(interaction);
+            }
+            if (mid === 'bugreport_modal') {
+                return await client.commands.get('bugreport').handleModalSubmit(interaction);
             }
             return;
         }
