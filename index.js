@@ -3,6 +3,9 @@ const { Client, GatewayIntentBits, Collection, Events, REST, Routes } = require(
 const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
+const express = require('express');
+const expressApp = express();
+expressApp.use(express.json());
 
 const client = new Client({
     intents: [
