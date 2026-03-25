@@ -177,6 +177,18 @@ async function start() {
         console.error('Discord login error:', err);
         process.exit(1);
     }
+
+    // Setup application route
+    var { setupApplicationRoute } = require('./routes/applications');
+    setupApplicationRoute(client, expressApp);
+
+    // Health check
+    expressApp.get('/', function(req, res) { res.send('Bot is running'); });
+
+    var PORT = process.env.PORT || 3000;
+    expressApp.listen(PORT, function() {
+        console.log('API listening on port ' + PORT);
+    });
 }
 
 start();
