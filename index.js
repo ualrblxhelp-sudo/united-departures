@@ -124,6 +124,14 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (bid === 'edit_replace_cancel') {
                 return await client.commands.get('edit').handleReplaceCancel(interaction);
             }
+            if (bid.startsWith('inactivity_approve_')) {
+                var userId = bid.replace('inactivity_approve_', '');
+                return await client.commands.get('inactivity').handleApprove(interaction, userId);
+            }
+            if (bid.startsWith('inactivity_deny_')) {
+                var userId = bid.replace('inactivity_deny_', '');
+                return await client.commands.get('inactivity').handleDeny(interaction, userId);
+            }
             return;
         }
     } catch (err) {
