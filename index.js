@@ -89,6 +89,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (mid === 'bugreport_modal') {
                 return await client.commands.get('bugreport').handleModalSubmit(interaction);
             }
+            if (mid === 'inactivity_modal') {
+                return await client.commands.get('inactivity').handleModalSubmit(interaction);
+            }
             return;
         }
 
