@@ -85,6 +85,7 @@ module.exports = {
     },
 
     async handleApprove(interaction, userId) {
+        await interaction.deferUpdate();
         try {
             var user = await interaction.client.users.fetch(userId);
             var approveEmbed = new EmbedBuilder()
