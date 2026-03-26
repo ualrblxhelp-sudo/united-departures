@@ -105,13 +105,14 @@ module.exports = {
             .setTitle('\u2705 Leave of Absence — Approved');
         originalEmbed.setFooter({ text: 'Approved by ' + interaction.user.username });
 
-        await interaction.update({
+        await interaction.editReply({
             embeds: [originalEmbed],
             components: [],
         });
     },
 
     async handleDeny(interaction, userId) {
+        await interaction.deferUpdate();
         try {
             var user = await interaction.client.users.fetch(userId);
             var denyEmbed = new EmbedBuilder()
@@ -131,7 +132,7 @@ module.exports = {
             .setTitle('\u274C Leave of Absence — Denied');
         originalEmbed.setFooter({ text: 'Denied by ' + interaction.user.username });
 
-        await interaction.update({
+        await interaction.editReply({
             embeds: [originalEmbed],
             components: [],
         });
