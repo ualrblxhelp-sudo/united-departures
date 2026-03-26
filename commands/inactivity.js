@@ -44,8 +44,8 @@ module.exports = {
         var reason = interaction.fields.getTextInputValue('reason').trim();
 
         var embed = new EmbedBuilder()
-            .setTitle('\uD83D\uDCC5 Leave of Absence Notice')
-            .setColor(0xFFA500)
+            .setTitle('Leave of Absence Notice')
+            .setColor(0x45194c)
             .setDescription(
                 '**Employee:** <@' + interaction.user.id + '> (' + interaction.user.username + ')\n' +
                 '**Roblox:** ' + robloxUsername + '\n' +
@@ -59,7 +59,7 @@ module.exports = {
 
         var row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('inactivity_approve_' + interaction.user.id).setLabel('Approve').setStyle(ButtonStyle.Success).setEmoji({ id: '1408484391348605069', name: 'volare_check' }),
-            new ButtonBuilder().setCustomId('inactivity_deny_' + interaction.user.id).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji('\u274C'),
+            new ButtonBuilder().setCustomId('inactivity_deny_' + interaction.user.id).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji({ id: '1408481910098890824', name: 'volare_no' }),
         );
 
         try {
