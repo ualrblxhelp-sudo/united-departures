@@ -1,6 +1,6 @@
 const {
     SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
-    ActionRowBuilder, EmbedBuilder,
+    ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
 
 var INACTIVITY_CHANNEL_ID = process.env.INACTIVITY_CHANNEL_ID;
@@ -57,7 +57,11 @@ module.exports = {
             .setTimestamp()
             .setFooter({ text: 'Inactivity Notice \u2022 Submitted by ' + interaction.user.username });
 
-        // Send to inactivity channel
+        var row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('inactivity_approve_' + interaction.user.id).setLabel('Approve').setStyle(ButtonStyle.Success).setEmoji({ id: '1408484391348605069', name: 'volare_check' }),
+            new ButtonBuilder().setCustomId('inactivity_deny_' + interaction.user.id).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji('\u274C'),
+        );
+
         try {
             var guild = interaction.client.guilds.cache.get('1309560657473179679');
             var channel = null;
@@ -66,9 +70,7 @@ module.exports = {
                 if (!channel) channel = await guild.channels.fetch(INACTIVITY_CHANNEL_ID).catch(function() { return null; });
             }
             if (channel) {
-                var msg = await channel.send({ embeds: [embed] });
-                await msg.react('\u2705');
-                await msg.react('\u274C');
+                await channel.send({ embeds: [embed], components: [row] });
             } else {
                 console.error('[Inactivity] Channel not found: ' + INACTIVITY_CHANNEL_ID);
             }
@@ -79,6 +81,58 @@ module.exports = {
         await interaction.reply({
             content: '<:volare_check:1408484391348605069> Your leave of absence notice has been submitted. Management will review it shortly.',
             ephemeral: true,
+        });
+    },
+
+    async handleApprove(interaction, userId) {
+        try {
+            var user = await interaction.client.users.fetch(userId);
+            var approveEmbed = new EmbedBuilder()
+                .setTitle('<:volare_check:1408484391348605069> Leave of Absence Approved')
+                .setColor(0x00CC00)
+                .setDescription('Your leave of absence notice has been **approved** by <@' + interaction.user.id + '>.\n\nPlease ensure you return on the date specified in your notice.')
+                .setTimestamp()
+                .setFooter({ text: 'United Volare \u2022 Inactivity Management' });
+            await user.send({ embeds: [approveEmbed] });
+        } catch (err) {
+            console.error('[Inactivity] DM error:', err);
+        }
+
+        // Update the original message
+        var originalEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+            .setColor(0x00CC00)
+            .setTitle('\u2705 Leave of Absence — Approved');
+        originalEmbed.setFooter({ text: 'Approved by ' + interaction.user.username });
+
+        await interaction.update({
+            embeds: [originalEmbed],
+            components: [],
+        });
+    },
+
+    async handleDeny(interaction, userId) {
+        try {
+            var user = await interaction.client.users.fetch(userId);
+            var denyEmbed = new EmbedBuilder()
+                .setTitle('\u274C Leave of Absence Denied')
+                .setColor(0xFF0000)
+                .setDescription('Your leave of absence notice has been **denied** by <@' + interaction.user.id + '>.\n\nPlease reach out to management if you have questions.')
+                .setTimestamp()
+                .setFooter({ text: 'United Volare \u2022 Inactivity Management' });
+            await user.send({ embeds: [denyEmbed] });
+        } catch (err) {
+            console.error('[Inactivity] DM error:', err);
+        }
+
+        // Update the original message
+        var originalEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+            .setColor(0xFF0000)
+            .setTitle('\u274C Leave of Absence — Denied');
+        originalEmbed.setFooter({ text: 'Denied by ' + interaction.user.username });
+
+        await interaction.update({
+            embeds: [originalEmbed],
+            components: [],
         });
     },
 };
