@@ -1,6 +1,7 @@
 var { EmbedBuilder, ChannelType } = require('discord.js');
 
 var APPLICATION_CATEGORY_ID = '1486496711861080074';
+var EMBED_COLOR = 0x0b0fa8;
 
 async function checkAI(text) {
     if (!text || text.length < 50) return null;
@@ -63,13 +64,13 @@ function setupApplicationRoute(client, app) {
                 name: channelName,
                 type: ChannelType.GuildText,
                 parent: APPLICATION_CATEGORY_ID,
-                topic: data.department + ' Application \u2022 Discord: ' + data.discordUsername + ' \u2022 Roblox: ' + data.robloxUsername,
+                topic: data.department + ' \u2022 Discord: ' + data.discordUsername + ' \u2022 Roblox: ' + data.robloxUsername,
             });
 
             // Header embed
             var headerEmbed = new EmbedBuilder()
                 .setTitle('\uD83D\uDCCB ' + data.department + ' Application')
-                .setColor(0x0b0fa8)
+                .setColor(EMBED_COLOR)
                 .setDescription(
                     '**Applicant:** ' + data.discordUsername + '\n' +
                     '**Roblox:** ' + data.robloxUsername + '\n' +
@@ -82,7 +83,7 @@ function setupApplicationRoute(client, app) {
             // Universal section embed
             var universalEmbed = new EmbedBuilder()
                 .setTitle('Universal Section')
-                .setColor(0x2596be)
+                .setColor(EMBED_COLOR)
                 .addFields(
                     { name: 'Time Zone', value: data.timezone || 'N/A', inline: true },
                     { name: 'Age Group', value: data.ageGroup || 'N/A', inline: true },
@@ -100,7 +101,7 @@ function setupApplicationRoute(client, app) {
             if (questions.length > 0) {
                 var deptEmbed = new EmbedBuilder()
                     .setTitle(data.department + ' Questions')
-                    .setColor(0x1414d2);
+                    .setColor(EMBED_COLOR);
 
                 var overallText = '';
 
@@ -130,15 +131,18 @@ function setupApplicationRoute(client, app) {
                 await channel.send({ embeds: [deptEmbed] });
             }
 
-            // Summary embed
+            // Review actions embed
             var summaryEmbed = new EmbedBuilder()
                 .setTitle('\u2699\uFE0F Review Actions')
-                .setColor(0x333333)
-                .setDescription('React to this message to indicate your decision:\n\n\u2705 Accept\n\u274C Deny\n\uD83D\uDD04 Pending Review');
+                .setColor(EMBED_COLOR)
+                .setDescription('React to this message to indicate your decision:\n\n<:volare_check:1408484391348605069> Accept\n<:volare_reject:1408484388681027614> Deny');
             var summaryMsg = await channel.send({ embeds: [summaryEmbed] });
-            await summaryMsg.react('\u2705');
-            await summaryMsg.react('\u274C');
-            await summaryMsg.react('\uD83D\uDD04');
+            try {
+                await summaryMsg.react('<:volare_check:1408484391348605069>');
+                await summaryMsg.react('<:volare_reject:1408484388681027614>');
+            } catch (reactErr) {
+                console.error('[Application] React error:', reactErr);
+            }
 
             console.log('[Application] Channel created: ' + channelName);
             res.json({ success: true, channelId: channel.id });
