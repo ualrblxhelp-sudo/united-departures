@@ -132,6 +132,12 @@ client.on(Events.InteractionCreate, async function(interaction) {
                 var userId = bid.replace('inactivity_deny_', '');
                 return await client.commands.get('inactivity').handleDeny(interaction, userId);
             }
+            if (bid === 'fire_confirm') {
+                return await client.commands.get('fire').handleConfirm(interaction);
+            }
+            if (bid === 'fire_cancel') {
+                return await client.commands.get('fire').handleCancel(interaction);
+            }
             return;
         }
     } catch (err) {
