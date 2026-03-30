@@ -69,7 +69,7 @@ function setupApplicationRoute(client, app) {
 
             // Header embed
             var headerEmbed = new EmbedBuilder()
-                .setTitle('data.department + ' Application')
+                .setTitle(data.department + ' Application')
                 .setColor(EMBED_COLOR)
                 .setDescription(
                     '**Applicant:** ' + data.discordUsername + '\n' +
