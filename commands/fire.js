@@ -1,5 +1,5 @@
 const {
-    SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder,
+    SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
 
 var MANAGEMENT_ROLE_ID = '1309724300156207216';
@@ -11,11 +11,8 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('fire')
         .setDescription('Terminate an employee from United Airlines')
-        .addUserOption(function(opt) {
-            return opt.setName('employee').setDescription('The employee to terminate').setRequired(true);
-        })
         .addStringOption(function(opt) {
-            return opt.setName('reason').setDescription('Reason for termination').setRequired(true);
+            return opt.setName('id').setDescription('Discord User ID of the employee').setRequired(true);
         }),
 
     async execute(interaction) {
@@ -26,98 +23,88 @@ module.exports = {
             return interaction.reply({ content: '\u274C You do not have permission to use this command.', ephemeral: true });
         }
 
-        var target = interaction.options.getUser('employee');
-        var reason = interaction.options.getString('reason');
+        var targetId = interaction.options.getString('id').trim();
+        var match = targetId.match(/(\d{17,20})/);
+        if (!match) {
+            return interaction.reply({ content: '\u274C Invalid Discord User ID.', ephemeral: true });
+        }
+        targetId = match[1];
 
-        if (target.id === interaction.user.id) {
+        if (targetId === interaction.user.id) {
             return interaction.reply({ content: '\u274C You cannot terminate yourself.', ephemeral: true });
         }
-        if (target.bot) {
-            return interaction.reply({ content: '\u274C You cannot terminate a bot.', ephemeral: true });
+
+        var guild = interaction.client.guilds.cache.get(VOLARE_SERVER_ID);
+        var member = await guild.members.fetch(targetId).catch(function() { return null; });
+        if (!member) {
+            return interaction.reply({ content: '\u274C User not found in the server.', ephemeral: true });
         }
 
         pendingFires.set(interaction.user.id, {
-            targetId: target.id,
-            targetTag: target.username,
-            reason: reason,
+            targetId: targetId,
+            targetTag: member.user.username,
         });
-
-        var embed = new EmbedBuilder()
-            .setTitle('Confirm Termination')
-            .setColor(0xFF0000)
-            .setDescription(
-                '**Employee:** <@' + target.id + '> (' + target.username + ')\n' +
-                '**Reason:** ' + reason + '\n\n' +
-                'This will:\n' +
-                '\u2022 Send a termination notice to the employee via DM\n' +
-                '\u2022 Kick them from the server\n\n' +
-                '**This action cannot be undone.**'
-            );
 
         var row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('fire_confirm').setLabel('Confirm Termination').setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId('fire_cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
         );
 
-        await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+        await interaction.reply({
+            content: '\u26A0\uFE0F Are you sure you want to terminate **' + member.user.username + '** (<@' + targetId + '>)?\n\nThis will DM them a termination notice and kick them from the server. **This cannot be undone.**',
+            components: [row],
+            ephemeral: true,
+        });
     },
 
     async handleConfirm(interaction) {
         var pending = pendingFires.get(interaction.user.id);
-        if (!pending) return interaction.update({ content: '\u274C Session expired.', embeds: [], components: [] });
+        if (!pending) return interaction.update({ content: '\u274C Session expired.', components: [] });
 
         await interaction.deferUpdate();
 
         var guild = interaction.client.guilds.cache.get(VOLARE_SERVER_ID);
-        if (!guild) {
-            pendingFires.delete(interaction.user.id);
-            return interaction.editReply({ content: '\u274C Server not found.', embeds: [], components: [] });
-        }
-
         var member = await guild.members.fetch(pending.targetId).catch(function() { return null; });
         if (!member) {
             pendingFires.delete(interaction.user.id);
-            return interaction.editReply({ content: '\u274C Employee is no longer in the server.', embeds: [], components: [] });
+            return interaction.editReply({ content: '\u274C Employee is no longer in the server.', components: [] });
         }
 
         // DM the employee
         try {
-            var dmEmbed = new EmbedBuilder()
-                .setTitle('United Airlines \u2014 Termination Notice')
-                .setColor(0xFF0000)
-                .setDescription(
-                    'We regret to inform you that your employment with **United Airlines** has been terminated.\n\n' +
-                    '**Reason:** ' + pending.reason + '\n\n' +
-                    '**Issued by:** ' + interaction.user.username + '\n\n' +
-                    'If you believe this was a mistake, you may reach out to management.'
-                )
-                .setTimestamp()
-                .setFooter({ text: 'United Airlines \u2022 Human Resources' });
+            var dmContent =
+                '<:volare_hammer:1408484978362290287> **Official Termination Notice**\n' +
+                '`Alejandro Garnacho \u2022 Human Resources`\n' +
+                '> <:volare_arrow:1408298312448086056> To the intended employee, this message serves as an official termination notice of your employment with United Airlines, effective immediately.\n' +
+                '> \n' +
+                '> This decision has been made after careful consideration and could be based on performance concerns, policy violations, or future business needs. Despite prior discussions and opportunities for improvement, the necessary changes may have not been achieved.\n' +
+                '<:volare_tail:1076723231391744050> You will be removed from all United Airlines\' internal servers and communications platforms. We appreciate your contributions during your time with United Airlines and wish you the best in your future endeavors.\n' +
+                '-# <:volare_fa:1408481918177251438> Sent from the Human Resources Department\n' +
+                '-# <:d_staralliance:1297074894164463628> \u1D00 \uA731\u1D1B\u1D00\u0280 \u1D00\u029F\u029F\u026A\u1D00\u0274\u1D04\u1D07 \u1D0D\u1D07\u1D0D\u1D03\u1D07\u0280';
 
-            await member.user.send({ embeds: [dmEmbed] });
+            await member.user.send({ content: dmContent });
         } catch (err) {
             console.error('[Fire] DM error:', err);
         }
 
         // Kick from server
         try {
-            await member.kick('Terminated by ' + interaction.user.username + ': ' + pending.reason);
+            await member.kick('Terminated by ' + interaction.user.username);
         } catch (err) {
             console.error('[Fire] Kick error:', err);
             pendingFires.delete(interaction.user.id);
-            return interaction.editReply({ content: '\u274C Failed to kick the employee. Make sure the bot has Kick Members permission and the employee is not a higher role.', embeds: [], components: [] });
+            return interaction.editReply({ content: '\u274C Failed to kick the employee. Make sure the bot has Kick Members permission and the employee is not a higher role.', components: [] });
         }
 
         pendingFires.delete(interaction.user.id);
         await interaction.editReply({
             content: '<:volare_check:1408484391348605069> **' + pending.targetTag + '** has been terminated from United Airlines.',
-            embeds: [],
             components: [],
         });
     },
 
     async handleCancel(interaction) {
         pendingFires.delete(interaction.user.id);
-        await interaction.update({ content: '\u274C Termination cancelled.', embeds: [], components: [] });
+        await interaction.update({ content: '\u274C Termination cancelled.', components: [] });
     },
 };
