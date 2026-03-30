@@ -84,7 +84,9 @@ function setupApplicationRoute(client, app) {
                 .setTitle('Universal Section')
                 .setColor(0x2596be)
                 .addFields(
-                    { name: 'Relevant Experiences', value: data.experiences || 'N/A' },
+                    { name: 'Time Zone', value: data.timezone || 'N/A', inline: true },
+                    { name: 'Age Group', value: data.ageGroup || 'N/A', inline: true },
+                    { name: 'Device', value: data.device || 'N/A', inline: true },
                     { name: 'Department Selected', value: data.department || 'N/A' },
                     { name: 'Agreed to ToS', value: data.tosAgreed || 'N/A', inline: true },
                     { name: 'No AI Promise', value: data.aiPromise || 'N/A', inline: true }
