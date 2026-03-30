@@ -163,12 +163,23 @@ client.once(Events.ClientReady, async function(c) {
         client.commands.forEach(function(cmd) {
             cmds.push(cmd.data.toJSON());
         });
-        var servers = [process.env.STAFF_SERVER_ID, process.env.CALENDAR_SERVER_ID];
-        for (var i = 0; i < servers.length; i++) {
-            if (servers[i]) {
-                await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, servers[i]), { body: cmds });
-                console.log('Commands registered to server ' + servers[i]);
+        // Register all commands to Volare staff server
+        if (process.env.STAFF_SERVER_ID) {
+            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.STAFF_SERVER_ID), { body: cmds });
+            console.log('All commands registered to staff server');
+        }
+
+        // Register only public commands to main United server
+        var publicCommands = ['link', 'unlink', 'bugreport', 'status'];
+        var publicCmds = [];
+        client.commands.forEach(function(cmd) {
+            if (publicCommands.indexOf(cmd.data.name) !== -1) {
+                publicCmds.push(cmd.data.toJSON());
             }
+        });
+        if (process.env.CALENDAR_SERVER_ID) {
+            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.CALENDAR_SERVER_ID), { body: publicCmds });
+            console.log('Public commands registered to main server');
         }
     } catch (err) {
         console.error('Command registration error:', err);
