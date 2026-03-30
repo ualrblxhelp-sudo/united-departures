@@ -69,7 +69,7 @@ function setupApplicationRoute(client, app) {
 
             // Header embed
             var headerEmbed = new EmbedBuilder()
-                .setTitle('\uD83D\uDCCB ' + data.department + ' Application')
+                .setTitle('data.department + ' Application')
                 .setColor(EMBED_COLOR)
                 .setDescription(
                     '**Applicant:** ' + data.discordUsername + '\n' +
@@ -133,7 +133,7 @@ function setupApplicationRoute(client, app) {
 
             // Review actions embed
             var summaryEmbed = new EmbedBuilder()
-                .setTitle('\u2699\uFE0F Review Actions')
+                .setTitle('Review Actions')
                 .setColor(EMBED_COLOR)
                 .setDescription('React to this message to indicate your decision:\n\n<:volare_check:1408484391348605069> Accept\n<:volare_reject:1408484388681027614> Deny');
             var summaryMsg = await channel.send({ embeds: [summaryEmbed] });
