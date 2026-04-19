@@ -12,7 +12,7 @@ module.exports = {
 
     async execute(interaction) {
         if (interaction.guildId !== '1309560657473179679') {
-            return interaction.reply({ content: '\u274C This command can only be used in the United Volare server.', ephemeral: true });
+            return interaction.reply({ content: '<:e_decline:1397829342079483904> This command can only be used in the United Volare server.', ephemeral: true });
         }
 
         var modal = new ModalBuilder()
@@ -58,8 +58,8 @@ module.exports = {
             .setFooter({ text: 'Inactivity Notice \u2022 Submitted by ' + interaction.user.username });
 
         var row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('inactivity_approve_' + interaction.user.id).setLabel('Approve').setStyle(ButtonStyle.Success).setEmoji({ id: '1408484391348605069', name: 'volare_check' }),
-            new ButtonBuilder().setCustomId('inactivity_deny_' + interaction.user.id).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji({ id: '1408481910098890824', name: 'volare_no' }),
+            new ButtonBuilder().setCustomId('inactivity_approve_' + interaction.user.id).setLabel('Approve').setStyle(ButtonStyle.Success).setEmoji({ id: '1397829338367393853', name: 'e_accept' }),
+            new ButtonBuilder().setCustomId('inactivity_deny_' + interaction.user.id).setLabel('Deny').setStyle(ButtonStyle.Danger).setEmoji({ id: '1397829342079483904', name: 'e_decline' }),
         );
 
         try {
@@ -79,7 +79,7 @@ module.exports = {
         }
 
         await interaction.reply({
-            content: '<:volare_check:1408484391348605069> Your leave of absence notice has been submitted. Management will review it shortly.',
+            content: '<:e_accept:1397829338367393853> Your leave of absence notice has been submitted. Management will review it shortly.',
             ephemeral: true,
         });
     },
@@ -89,11 +89,17 @@ module.exports = {
         try {
             var user = await interaction.client.users.fetch(userId);
             var approveEmbed = new EmbedBuilder()
-                .setTitle('<:volare_check:1408484391348605069> Leave of Absence Approved')
-                .setColor(0x00CC00)
-                .setDescription('Your leave of absence notice has been **approved** by <@' + interaction.user.id + '>.\n\nPlease ensure you return on the date specified in your notice.')
+                .setTitle('<:e_accept:1397829338367393853> Leave of Absence Approved')
+                .setColor(0x080C96)
+                .setDescription(
+                    '> <:e_arrow:1406847964655259710> Thank you for contacting United Volare regarding your request for a Leave of Absence. Your line supervisor, in conjunction with Human Resources, has reviewed your request and has made the decision to **approve** your notice of inactivity. Based on the duration of this absence, your monthly quota will be reduced or set to zero for the month.\n' +
+                    '> \n' +
+                    '> United Airlines wishes you the best on your Leave of Absence.\n' +
+                    '<:UnitedPolaris:1298320157424488479> \u0262\u1D0F\u1D0F\u1D05 \u029F\u1D07\u1D00\u1D05\ua731 \u1D1B\u029C\u1D07 \u1D21\u1D00\u028F\n' +
+                    '<:d_staralliance:1397830727919337493> \u1D00 \ua731\u1D1B\u1D00\u0280 \u1D00\u029F\u029F\u026A\u1D00\u0274\u1D04\u1D07 \u1D0D\u1D07\u1D0D\u0299\u1D07\u0280'
+                )
                 .setTimestamp()
-                .setFooter({ text: 'United Volare \u2022 Inactivity Management' });
+                .setFooter({ text: 'United Volare \u2022 Human Resources' });
             await user.send({ embeds: [approveEmbed] });
         } catch (err) {
             console.error('[Inactivity] DM error:', err);
@@ -101,8 +107,8 @@ module.exports = {
 
         // Update the original message
         var originalEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-            .setColor(0x00CC00)
-            .setTitle('\u2705 Leave of Absence — Approved');
+            .setColor(0x080C96)
+            .setTitle('<:e_accept:1397829338367393853> Leave of Absence \u2014 Approved');
         originalEmbed.setFooter({ text: 'Approved by ' + interaction.user.username });
 
         await interaction.editReply({
@@ -116,11 +122,17 @@ module.exports = {
         try {
             var user = await interaction.client.users.fetch(userId);
             var denyEmbed = new EmbedBuilder()
-                .setTitle('\u274C Leave of Absence Denied')
-                .setColor(0xFF0000)
-                .setDescription('Your leave of absence notice has been **denied** by <@' + interaction.user.id + '>.\n\nPlease reach out to management if you have questions.')
+                .setTitle('<:e_decline:1397829342079483904> Leave of Absence Denied')
+                .setColor(0x080C96)
+                .setDescription(
+                    '> <:e_arrow:1406847964655259710> Thank you for contacting United Volare regarding your request for a Leave of Absence. Your line supervisor, in conjunction with Human Resources, has reviewed your request and has made the decision to **reject** your notice of inactivity.\n' +
+                    '> \n' +
+                    '> This can be due to **poor timing**, **invalid reasoning**, or **many more** reasons. We apologize for your frustration; however, our decision is final, and can only be re evaluated upon a valid request.\n' +
+                    '<:UnitedPolaris:1298320157424488479> \u0262\u1D0F\u1D0F\u1D05 \u029F\u1D07\u1D00\u1D05\ua731 \u1D1B\u029C\u1D07 \u1D21\u1D00\u028F\n' +
+                    '<:d_staralliance:1397830727919337493> \u1D00 \ua731\u1D1B\u1D00\u0280 \u1D00\u029F\u029F\u026A\u1D00\u0274\u1D04\u1D07 \u1D0D\u1D07\u1D0D\u0299\u1D07\u0280'
+                )
                 .setTimestamp()
-                .setFooter({ text: 'United Volare \u2022 Inactivity Management' });
+                .setFooter({ text: 'United Volare \u2022 Human Resources' });
             await user.send({ embeds: [denyEmbed] });
         } catch (err) {
             console.error('[Inactivity] DM error:', err);
@@ -128,8 +140,8 @@ module.exports = {
 
         // Update the original message
         var originalEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-            .setColor(0xFF0000)
-            .setTitle('\u274C Leave of Absence — Denied');
+            .setColor(0x080C96)
+            .setTitle('<:e_decline:1397829342079483904> Leave of Absence \u2014 Denied');
         originalEmbed.setFooter({ text: 'Denied by ' + interaction.user.username });
 
         await interaction.editReply({
