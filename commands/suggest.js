@@ -13,10 +13,28 @@ var DOWNVOTE_EMOJI = { id: '1408484388681027614', name: 'volare_reject' };
 var UPVOTE_MARKUP = '<:volare_check:1408484391348605069>';
 var DOWNVOTE_MARKUP = '<:volare_reject:1408484388681027614>';
 
+var HAMMER_MARKUP = '<:volare_hammer:1408481914112835755>';
+var ARROW_MARKUP = '<:volare_arrow:1408485394747490385>';
+var CALENDAR_MARKUP = '<:volare_calendar:1408481918177251438>';
+
 var EMBED_COLOR = 0x3A1540;
 var TALLY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
 
-var IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp)(\?.*)?$/i;
+function isLikelyImageUrl(url) {
+    if (!url) return false;
+    try {
+        var u = new URL(url);
+        // Extension check against the pathname only (query string ignored)
+        if (/\.(png|jpe?g|gif|webp|bmp|svg|avif|heic|heif)$/i.test(u.pathname)) return true;
+        // Discord attachment CDNs are overwhelmingly image uploads
+        if (/^(cdn|media)\.discordapp\.(com|net)$/i.test(u.hostname) && u.pathname.indexOf('/attachments/') !== -1) return true;
+        // imgur direct image host
+        if (u.hostname === 'i.imgur.com') return true;
+        return false;
+    } catch (e) {
+        return false;
+    }
+}
 
 // In-process timer handles for live tallying. Repopulated on startup.
 var scheduledTallies = new Map();
@@ -33,23 +51,26 @@ function isValidUrl(str) {
 
 function buildSuggestionEmbed(s) {
     var embed = new EmbedBuilder()
-        .setTitle('\uD83D\uDCA1 ' + s.title)
+        .setTitle(HAMMER_MARKUP + ' Suggestion by ' + s.authorUsername)
         .setColor(EMBED_COLOR)
-        .setTimestamp(s.createdAt || new Date())
-        .setAuthor({ name: s.authorUsername });
+        .setTimestamp(s.createdAt || new Date());
 
-    var desc = s.description + '\n\n';
-    if (s.mediaUrl && !IMAGE_EXT_RE.test(s.mediaUrl)) {
+    var desc = '**' + s.title + '**\n\n';
+    desc += '> ' + ARROW_MARKUP + ' ' + s.description + '\n\n';
+
+    // Only show URL as text when it's NOT an image (e.g. YouTube video)
+    if (s.mediaUrl && !isLikelyImageUrl(s.mediaUrl)) {
         desc += '**Reference:** ' + s.mediaUrl + '\n\n';
     }
+
     desc += '**Submitted by:** <@' + s.authorId + '>\n';
-    desc += '\u23F0 **Voting closes:** <t:' + Math.floor(new Date(s.tallyAt).getTime() / 1000) + ':R>\n\n';
+    desc += CALENDAR_MARKUP + ' **Voting closes:** <t:' + Math.floor(new Date(s.tallyAt).getTime() / 1000) + ':R>\n\n';
     desc += UPVOTE_MARKUP + ' **' + (s.upvoters || []).length + '**  \u00B7  ' +
             DOWNVOTE_MARKUP + ' **' + (s.downvoters || []).length + '**';
 
     embed.setDescription(desc);
 
-    if (s.mediaUrl && IMAGE_EXT_RE.test(s.mediaUrl)) {
+    if (s.mediaUrl && isLikelyImageUrl(s.mediaUrl)) {
         embed.setImage(s.mediaUrl);
     }
 
@@ -61,12 +82,12 @@ function buildVoteRow(disabled) {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('suggest_up')
-            .setStyle(ButtonStyle.Success)
+            .setStyle(ButtonStyle.Secondary)
             .setEmoji(UPVOTE_EMOJI)
             .setDisabled(!!disabled),
         new ButtonBuilder()
             .setCustomId('suggest_down')
-            .setStyle(ButtonStyle.Danger)
+            .setStyle(ButtonStyle.Secondary)
             .setEmoji(DOWNVOTE_EMOJI)
             .setDisabled(!!disabled),
     );
