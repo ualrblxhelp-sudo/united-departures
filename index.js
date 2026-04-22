@@ -6,25 +6,25 @@ const path = require('path');
 const express = require('express');
 const expressApp = express();
 expressApp.use(express.json());
-
+ 
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
     ],
 });
-
+ 
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(function(f) { return f.endsWith('.js'); });
-
+ 
 for (const file of commandFiles) {
     const command = require(path.join(commandsPath, file));
     if (command.data) {
         client.commands.set(command.data.name, command);
     }
 }
-
+ 
 client.on(Events.InteractionCreate, async function(interaction) {
     try {
         if (interaction.isChatInputCommand()) {
@@ -32,7 +32,7 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (command) await command.execute(interaction);
             return;
         }
-
+ 
         if (interaction.isStringSelectMenu()) {
             var id = interaction.customId;
             if (id === 'create_type') {
@@ -71,7 +71,7 @@ client.on(Events.InteractionCreate, async function(interaction) {
             return;
             return;
         }
-
+ 
         if (interaction.isModalSubmit()) {
             var mid = interaction.customId;
             if (mid === 'create_modal') {
@@ -92,9 +92,12 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (mid === 'inactivity_modal') {
                 return await client.commands.get('inactivity').handleModalSubmit(interaction);
             }
+            if (mid === 'suggest_modal') {
+                return await client.commands.get('suggest').handleModalSubmit(interaction);
+            }
             return;
         }
-
+ 
         if (interaction.isButton()) {
             var bid = interaction.customId;
             if (bid === 'create_confirm') {
@@ -138,6 +141,12 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (bid === 'fire_cancel') {
                 return await client.commands.get('fire').handleCancel(interaction);
             }
+            if (bid === 'suggest_up') {
+                return await client.commands.get('suggest').handleVote(interaction, 'up');
+            }
+            if (bid === 'suggest_down') {
+                return await client.commands.get('suggest').handleVote(interaction, 'down');
+            }
             return;
         }
     } catch (err) {
@@ -152,11 +161,11 @@ client.on(Events.InteractionCreate, async function(interaction) {
         } catch (e) {}
     }
 });
-
+ 
 client.once(Events.ClientReady, async function(c) {
     console.log('Logged in as ' + c.user.tag);
     console.log('Servers: ' + c.guilds.cache.map(function(g) { return g.name; }).join(', '));
-
+ 
     try {
         var rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
         var cmds = [];
@@ -168,7 +177,7 @@ client.once(Events.ClientReady, async function(c) {
             await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.STAFF_SERVER_ID), { body: cmds });
             console.log('All commands registered to staff server');
         }
-
+ 
         // Register only public commands to main United server
         var publicCommands = ['bugreport'];
         var publicCmds = [];
@@ -184,13 +193,23 @@ client.once(Events.ClientReady, async function(c) {
     } catch (err) {
         console.error('Command registration error:', err);
     }
-
+ 
     var calendar = require('./utils/calendar');
     calendar.updateAllCalendars(client).catch(function(err) {
         console.error('Calendar update error:', err);
     });
+ 
+    // Reschedule any un-tallied suggestions that were pending at shutdown
+    try {
+        var suggestCmd = client.commands.get('suggest');
+        if (suggestCmd && typeof suggestCmd.initPendingTallies === 'function') {
+            await suggestCmd.initPendingTallies(client);
+        }
+    } catch (err) {
+        console.error('[Suggest] Pending tally init error:', err);
+    }
 });
-
+ 
 async function start() {
     try {
         await mongoose.connect(process.env.MONGODB_URI);
@@ -205,18 +224,18 @@ async function start() {
         console.error('Discord login error:', err);
         process.exit(1);
     }
-
+ 
     // Setup application route
     var { setupApplicationRoute } = require('./routes/applications');
     setupApplicationRoute(client, expressApp);
-
+ 
     // Health check
     expressApp.get('/', function(req, res) { res.send('Bot is running'); });
-
+ 
     var PORT = process.env.PORT || 3000;
     expressApp.listen(PORT, function() {
         console.log('API listening on port ' + PORT);
     });
 }
-
+ 
 start();
