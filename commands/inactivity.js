@@ -2,6 +2,7 @@ const {
     SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
     ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
+const LeaveOfAbsence = require('../models/LeaveOfAbsence');
 
 var INACTIVITY_CHANNEL_ID = process.env.INACTIVITY_CHANNEL_ID;
 
@@ -86,6 +87,46 @@ module.exports = {
 
     async handleApprove(interaction, userId) {
         await interaction.deferUpdate();
+
+        // Parse LOA fields from the original embed description and persist to DB
+        try {
+            var desc = (interaction.message.embeds[0] && interaction.message.embeds[0].description) || '';
+            var startMatch = desc.match(/\*\*Start Date:\*\*\s*([^\n]+)/);
+            var endMatch = desc.match(/\*\*End Date:\*\*\s*([^\n]+)/);
+            var reasonMatch = desc.match(/\*\*Reason:\*\*\s*\n?([\s\S]*)$/);
+            var robloxMatch = desc.match(/\*\*Roblox:\*\*\s*([^\n]+)/);
+
+            if (startMatch && endMatch) {
+                var startRaw = startMatch[1].trim();
+                var endRaw = endMatch[1].trim();
+                var startMs = Date.parse(startRaw);
+                var endMs = Date.parse(endRaw);
+                if (!isNaN(startMs) && !isNaN(endMs)) {
+                    // Store end date at end-of-day so a leave ending "May 10" covers all of May 10
+                    var endDate = new Date(endMs);
+                    endDate.setHours(23, 59, 59, 999);
+                    var fetchedUser = await interaction.client.users.fetch(userId).catch(function() { return null; });
+                    await LeaveOfAbsence.create({
+                        userId: userId,
+                        username: fetchedUser ? fetchedUser.username : null,
+                        robloxUsername: robloxMatch ? robloxMatch[1].trim() : null,
+                        startDate: new Date(startMs),
+                        endDate: endDate,
+                        reason: reasonMatch ? reasonMatch[1].trim() : null,
+                        approvedBy: interaction.user.id,
+                        approvedByUsername: interaction.user.username,
+                        approvedAt: new Date(),
+                    });
+                } else {
+                    console.error('[Inactivity] Could not parse dates:', startRaw, '/', endRaw);
+                }
+            } else {
+                console.error('[Inactivity] Could not locate date fields in embed description');
+            }
+        } catch (err) {
+            console.error('[Inactivity] LOA persistence error:', err);
+        }
+
         try {
             var user = await interaction.client.users.fetch(userId);
             var approveEmbed = new EmbedBuilder()
