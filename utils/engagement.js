@@ -149,6 +149,89 @@ async function getAllPRMemberIds(client) {
 }
 
 // ---- Weekly rotation ----
+
+// Build a 7-slot rotation that:
+//  - distributes 7 days as evenly as possible across N members
+//  - gives the "extras" (7 mod N) to members with the fewest prior-week assignments
+//  - avoids back-to-back same-member days when the team has 3+ members
+function buildBalancedSchedule(memberIds, priorCounts) {
+    var N = memberIds.length;
+    if (N === 0) return [];
+
+    // Sort members by prior-week count ascending (least-used first), with random tiebreak
+    var sorted = memberIds.slice();
+    var withCounts = sorted.map(function(id) {
+        return { id: id, prior: priorCounts[id] || 0, jitter: Math.random() };
+    });
+    withCounts.sort(function(a, b) {
+        if (a.prior !== b.prior) return a.prior - b.prior;
+        return a.jitter - b.jitter;
+    });
+
+    // Compute per-member quotas
+    var base = Math.floor(7 / N);
+    var extras = 7 % N;
+    var quotas = {};
+    for (var i = 0; i < withCounts.length; i++) {
+        quotas[withCounts[i].id] = base + (i < extras ? 1 : 0);
+    }
+
+    // Greedy day-by-day assignment: at each step, pick the member with the highest
+    // remaining quota who is NOT the same as yesterday's pick (when team has 3+ members).
+    var schedule = []; // array of userIds, length 7
+    var prev = null;
+    for (var day = 0; day < 7; day++) {
+        // Build candidate list: anyone with quota left
+        var candidates = [];
+        for (var k = 0; k < memberIds.length; k++) {
+            var id = memberIds[k];
+            if (quotas[id] > 0) candidates.push(id);
+        }
+        if (candidates.length === 0) break; // shouldn't happen if quotas sum to 7
+
+        // Filter out yesterday's pick if team has 3+ members and there's any other choice
+        var filtered = candidates;
+        if (N >= 3 && prev !== null) {
+            var withoutPrev = candidates.filter(function(id) { return id !== prev; });
+            if (withoutPrev.length > 0) filtered = withoutPrev;
+        }
+
+        // From the filtered set, prefer member with highest remaining quota
+        // (so heavier-loaded members get distributed earlier), with random tiebreak
+        var best = null;
+        var bestQuota = -1;
+        var bestTie = -1;
+        for (var m = 0; m < filtered.length; m++) {
+            var cid = filtered[m];
+            var q = quotas[cid];
+            var tie = Math.random();
+            if (q > bestQuota || (q === bestQuota && tie > bestTie)) {
+                best = cid; bestQuota = q; bestTie = tie;
+            }
+        }
+
+        schedule.push(best);
+        quotas[best] -= 1;
+        prev = best;
+    }
+    return schedule;
+}
+
+async function getPriorWeekCounts(weekStartDate) {
+    // Sum assignments per user from the previous week's rotation, if any
+    var prevStart = addDaysToYMD(weekStartDate, -7);
+    var prevRotation = await WeeklyRotation.findOne({ weekStartDate: prevStart });
+    var counts = {};
+    if (prevRotation && prevRotation.assignments) {
+        for (var i = 0; i < prevRotation.assignments.length; i++) {
+            var uid = prevRotation.assignments[i].userId;
+            if (!uid) continue;
+            counts[uid] = (counts[uid] || 0) + 1;
+        }
+    }
+    return counts;
+}
+
 async function getOrCreateWeeklyRotation(client, nowDate) {
     var weekStart = centralWeekStartString(nowDate);
     var existing = await WeeklyRotation.findOne({ weekStartDate: weekStart });
@@ -157,13 +240,120 @@ async function getOrCreateWeeklyRotation(client, nowDate) {
     var members = await getAllPRMemberIds(client);
     if (members.length === 0) return null;
 
-    shuffle(members);
+    var priorCounts = await getPriorWeekCounts(weekStart);
+    var schedule = buildBalancedSchedule(members, priorCounts);
+
     var assignments = [];
     for (var i = 0; i < 7; i++) {
         var d = addDaysToYMD(weekStart, i);
-        assignments.push({ date: d, userId: members[i % members.length] });
+        assignments.push({ date: d, userId: schedule[i] || null });
     }
     return await WeeklyRotation.create({ weekStartDate: weekStart, assignments: assignments });
+}
+
+// Regenerate the rotation for a given week, only touching days that DON'T already have a PRAssignment.
+// Returns a summary object describing what was kept vs. changed.
+async function regenerateWeek(client, weekStartString) {
+    var members = await getAllPRMemberIds(client);
+    if (members.length === 0) {
+        return { ok: false, error: 'No PR members in role' };
+    }
+
+    // Find all dates this week that already have a PRAssignment (these are locked — we can't reassign them)
+    var weekDates = [];
+    for (var i = 0; i < 7; i++) weekDates.push(addDaysToYMD(weekStartString, i));
+
+    var existingAssignments = await PRAssignment.find({ date: { $in: weekDates } });
+    var lockedByDate = {};
+    for (var j = 0; j < existingAssignments.length; j++) {
+        lockedByDate[existingAssignments[j].date] = existingAssignments[j];
+    }
+
+    // Build per-member tally of locked days so the new schedule respects them in fairness
+    var lockedCounts = {};
+    Object.keys(lockedByDate).forEach(function(date) {
+        var uid = lockedByDate[date].originalAssigneeId;
+        if (uid && uid !== '0') lockedCounts[uid] = (lockedCounts[uid] || 0) + 1;
+    });
+
+    var priorCounts = await getPriorWeekCounts(weekStartString);
+    // Treat already-locked days as if they count toward this week's load when computing fairness
+    var combinedCounts = {};
+    members.forEach(function(id) {
+        combinedCounts[id] = (priorCounts[id] || 0) + (lockedCounts[id] || 0);
+    });
+
+    // Compute how many days are still unlocked
+    var unlockedDates = weekDates.filter(function(d) { return !lockedByDate[d]; });
+    var unlockedCount = unlockedDates.length;
+
+    // Distribute unlockedCount days across members, weighted toward those with lower combined counts
+    var sortedMembers = members.slice().map(function(id) {
+        return { id: id, score: combinedCounts[id] || 0, jitter: Math.random() };
+    });
+    sortedMembers.sort(function(a, b) {
+        if (a.score !== b.score) return a.score - b.score;
+        return a.jitter - b.jitter;
+    });
+    sortedMembers = sortedMembers.map(function(o) { return o.id; });
+
+    var base = Math.floor(unlockedCount / members.length);
+    var extras = unlockedCount % members.length;
+    var quotas = {};
+    for (var k = 0; k < sortedMembers.length; k++) {
+        quotas[sortedMembers[k]] = base + (k < extras ? 1 : 0);
+    }
+
+    // Walk the 7-day week in order: locked days reuse the lockedByDate user; unlocked days greedily pick
+    var newAssignments = [];
+    var prev = null;
+    for (var d = 0; d < 7; d++) {
+        var date = weekDates[d];
+        if (lockedByDate[date]) {
+            newAssignments.push({ date: date, userId: lockedByDate[date].originalAssigneeId });
+            prev = lockedByDate[date].originalAssigneeId;
+            continue;
+        }
+        // Pick from candidates with quota > 0; avoid prev when possible (3+ team)
+        var candidates = members.filter(function(id) { return quotas[id] > 0; });
+        if (candidates.length === 0) {
+            newAssignments.push({ date: date, userId: null });
+            prev = null;
+            continue;
+        }
+        var filtered = candidates;
+        if (members.length >= 3 && prev !== null) {
+            var withoutPrev = candidates.filter(function(id) { return id !== prev; });
+            if (withoutPrev.length > 0) filtered = withoutPrev;
+        }
+        var best = null;
+        var bestQ = -1;
+        var bestTie = -1;
+        for (var m = 0; m < filtered.length; m++) {
+            var cid = filtered[m];
+            var q = quotas[cid];
+            var tie = Math.random();
+            if (q > bestQ || (q === bestQ && tie > bestTie)) { best = cid; bestQ = q; bestTie = tie; }
+        }
+        newAssignments.push({ date: date, userId: best });
+        quotas[best] -= 1;
+        prev = best;
+    }
+
+    var existing = await WeeklyRotation.findOne({ weekStartDate: weekStartString });
+    if (existing) {
+        existing.assignments = newAssignments;
+        await existing.save();
+    } else {
+        existing = await WeeklyRotation.create({ weekStartDate: weekStartString, assignments: newAssignments });
+    }
+
+    return {
+        ok: true,
+        rotation: existing,
+        lockedDates: Object.keys(lockedByDate),
+        regeneratedDates: unlockedDates,
+    };
 }
 
 // ---- Embeds ----
@@ -306,7 +496,24 @@ async function runDailyAssignment(client) {
             });
             return;
         }
-        assigneeId = subs[Math.floor(Math.random() * subs.length)];
+        // Pick the substitute with the fewest assignments this week, with random tiebreak
+        var weekStart = centralWeekStartString(now);
+        var thisWeek = await WeeklyRotation.findOne({ weekStartDate: weekStart });
+        var weekCounts = {};
+        if (thisWeek && thisWeek.assignments) {
+            for (var x = 0; x < thisWeek.assignments.length; x++) {
+                var u = thisWeek.assignments[x].userId;
+                if (u) weekCounts[u] = (weekCounts[u] || 0) + 1;
+            }
+        }
+        var subRanked = subs.map(function(id) {
+            return { id: id, count: weekCounts[id] || 0, jitter: Math.random() };
+        });
+        subRanked.sort(function(a, b) {
+            if (a.count !== b.count) return a.count - b.count;
+            return a.jitter - b.jitter;
+        });
+        assigneeId = subRanked[0].id;
     }
 
     var assignment;
@@ -334,13 +541,29 @@ async function runDailyAssignment(client) {
 
 // ---- Rejection chain advancement ----
 async function advanceAfterRejection(client, assignment) {
-    // Pick next random un-asked, available member
+    // Pick next un-asked, available member, weighted toward those with the fewest assignments this week
     var now = new Date();
     var exclude = assignment.rejectedIds.concat([]);
     var available = await getActivePRMemberIds(client, now, exclude);
 
     if (available.length > 0) {
-        var next = available[Math.floor(Math.random() * available.length)];
+        var weekStart = centralWeekStartString(now);
+        var thisWeek = await WeeklyRotation.findOne({ weekStartDate: weekStart });
+        var weekCounts = {};
+        if (thisWeek && thisWeek.assignments) {
+            for (var x = 0; x < thisWeek.assignments.length; x++) {
+                var u = thisWeek.assignments[x].userId;
+                if (u) weekCounts[u] = (weekCounts[u] || 0) + 1;
+            }
+        }
+        var ranked = available.map(function(id) {
+            return { id: id, count: weekCounts[id] || 0, jitter: Math.random() };
+        });
+        ranked.sort(function(a, b) {
+            if (a.count !== b.count) return a.count - b.count;
+            return a.jitter - b.jitter;
+        });
+        var next = ranked[0].id;
         assignment.currentAssigneeId = next;
         await assignment.save();
         var sent = await sendAssignmentDM(client, assignment, next);
@@ -600,4 +823,6 @@ module.exports = {
     onMessageCreate: onMessageCreate,
     handleAccept: handleAccept,
     handleReject: handleReject,
+    regenerateWeek: regenerateWeek,
+    centralWeekStartString: centralWeekStartString,
 };
