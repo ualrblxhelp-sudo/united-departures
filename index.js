@@ -222,6 +222,14 @@ client.once(Events.ClientReady, async function(c) {
     } catch (err) {
         console.error('[PR] Engagement start error:', err);
     }
+
+    // Start the points cleanup scheduler (expire 2-month-old points every 6h)
+    try {
+        var points = require('./utils/points');
+        points.startCleanupScheduler(client);
+    } catch (err) {
+        console.error('[Points] Cleanup scheduler start error:', err);
+    }
 });
 
 // PR engagement completion detection (watches #hemispheres for @everyone posts)
