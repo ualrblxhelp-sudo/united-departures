@@ -103,8 +103,12 @@ async function isOnApprovedLeave(userId, date) {
 }
 
 // ---- PR member fetching ----
-async function getActivePRMemberIds(client, date, excludeIds) {
-    excludeIds = excludeIds || [];
+// Fetches member IDs that have the PR role.
+// Requires GUILD_MEMBERS privileged intent — both `guild.members.fetch()` and the
+// REST `members.list()` endpoint won't return data without it.
+// We fetch all members ONCE per call (no `userIds` arg) with a hard timeout so
+// a hung request can never block the assignment flow indefinitely.
+async function fetchPRRoleMemberIds(client) {
     var guild;
     try {
         guild = await client.guilds.fetch(VOLARE_GUILD_ID);
@@ -112,15 +116,38 @@ async function getActivePRMemberIds(client, date, excludeIds) {
         console.error('[PR] Failed to fetch Volare guild:', err);
         return [];
     }
-    try {
-        await guild.members.fetch();
-    } catch (err) {
-        console.error('[PR] Members fetch error:', err);
-    }
     var role = guild.roles.cache.get(PR_ROLE_ID) || await guild.roles.fetch(PR_ROLE_ID).catch(function() { return null; });
-    if (!role) { console.error('[PR] PR role not found'); return []; }
+    if (!role) {
+        console.error('[PR] PR role not found');
+        return [];
+    }
 
-    var all = role.members.map(function(m) { return m.id; });
+    // If the role's member cache has anyone in it, use that — avoids a network round trip.
+    var cached = role.members.map(function(m) { return m.id; });
+    if (cached.length > 0) return cached;
+
+    // Cache miss. Fetch all members with a 30-second timeout.
+    // If this call hangs, it means the bot is missing the GuildMembers intent —
+    // either in the Discord developer portal or in the Client constructor.
+    try {
+        var fetchPromise = guild.members.fetch();
+        var timeoutPromise = new Promise(function(_, reject) {
+            setTimeout(function() {
+                reject(new Error('members.fetch timed out after 30s — is the GuildMembers privileged intent enabled?'));
+            }, 30 * 1000);
+        });
+        await Promise.race([fetchPromise, timeoutPromise]);
+    } catch (err) {
+        console.error('[PR] members.fetch error:', err.message);
+        return [];
+    }
+
+    return role.members.map(function(m) { return m.id; });
+}
+
+async function getActivePRMemberIds(client, date, excludeIds) {
+    excludeIds = excludeIds || [];
+    var all = await fetchPRRoleMemberIds(client);
     var active = [];
     for (var i = 0; i < all.length; i++) {
         if (excludeIds.indexOf(all[i]) !== -1) continue;
@@ -131,21 +158,7 @@ async function getActivePRMemberIds(client, date, excludeIds) {
 }
 
 async function getAllPRMemberIds(client) {
-    var guild;
-    try {
-        guild = await client.guilds.fetch(VOLARE_GUILD_ID);
-    } catch (err) {
-        console.error('[PR] Failed to fetch Volare guild:', err);
-        return [];
-    }
-    try {
-        await guild.members.fetch();
-    } catch (err) {
-        console.error('[PR] Members fetch error:', err);
-    }
-    var role = guild.roles.cache.get(PR_ROLE_ID) || await guild.roles.fetch(PR_ROLE_ID).catch(function() { return null; });
-    if (!role) return [];
-    return role.members.map(function(m) { return m.id; });
+    return await fetchPRRoleMemberIds(client);
 }
 
 // ---- Weekly rotation ----
