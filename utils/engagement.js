@@ -739,6 +739,7 @@ async function runEndOfDayCheck(client) {
 var _scheduled = false;
 var _lastNoonKey = null;
 var _lastEndOfDayKey = null;
+var _lastWeeklyRegenKey = null;
 
 function start(client) {
     if (_scheduled) return;
@@ -760,6 +761,25 @@ async function tick(client) {
     var hour = parseInt(c.hour, 10);
     var minute = parseInt(c.minute, 10);
     var dateKey = c.year + '-' + c.month + '-' + c.day;
+    var dow = centralDayOfWeek(now);
+
+    // Sunday at noon Central: regenerate the weekly rotation BEFORE the daily assignment runs.
+    // The week-key prevents accidental re-runs within the same Sunday if the bot restarts.
+    if (dow === 0 && hour === 12 && minute === 0 && _lastWeeklyRegenKey !== dateKey) {
+        _lastWeeklyRegenKey = dateKey;
+        try {
+            var weekStart = centralWeekStartString(now);
+            console.log('[PR] Sunday noon: regenerating weekly rotation for', weekStart);
+            var result = await regenerateWeek(client, weekStart);
+            if (result.ok) {
+                console.log('[PR] Rotation regenerated. Locked:', result.lockedDates.length, '| Regenerated:', result.regeneratedDates.length);
+            } else {
+                console.error('[PR] Weekly regen failed:', result.error);
+            }
+        } catch (err) {
+            console.error('[PR] Weekly regen error:', err);
+        }
+    }
 
     if (hour === 12 && minute === 0 && _lastNoonKey !== dateKey) {
         _lastNoonKey = dateKey;
@@ -777,6 +797,28 @@ async function startupCatchUp(client) {
     var c = centralParts(now);
     var hour = parseInt(c.hour, 10);
     var dateKey = c.year + '-' + c.month + '-' + c.day;
+    var dow = centralDayOfWeek(now);
+
+    // If it's Sunday and we're past noon Central but no rotation exists for this week
+    // (or the existing one predates our deploy), regenerate it before the daily assignment.
+    if (dow === 0 && hour >= 12) {
+        try {
+            var weekStart = centralWeekStartString(now);
+            var existingRotation = await WeeklyRotation.findOne({ weekStartDate: weekStart });
+            // If this week's rotation hasn't been touched today and no Sunday assignment yet, regenerate.
+            var sundayAssignment = await PRAssignment.findOne({ date: dateKey });
+            if (!sundayAssignment) {
+                console.log('[PR] Startup catch-up: missed Sunday-noon regen for', weekStart);
+                var result = await regenerateWeek(client, weekStart);
+                if (result.ok) {
+                    console.log('[PR] Catch-up regen complete. Locked:', result.lockedDates.length, '| Regenerated:', result.regeneratedDates.length);
+                }
+            }
+            _lastWeeklyRegenKey = dateKey; // prevent duplicate fire today
+        } catch (err) {
+            console.error('[PR] Startup weekly-regen error:', err);
+        }
+    }
 
     // If we're past noon Central and no assignment exists for today, run it now
     if (hour >= 12) {
