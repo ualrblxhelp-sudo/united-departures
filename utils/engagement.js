@@ -6,6 +6,7 @@ const {
 const PRAssignment = require('../models/PRAssignment');
 const WeeklyRotation = require('../models/WeeklyRotation');
 const LeaveOfAbsence = require('../models/LeaveOfAbsence');
+const points = require('./points');
 
 // ---- Configuration ----
 var MAIN_GUILD_ID = '1007704123312967760';
@@ -500,9 +501,15 @@ async function runEndOfDayCheck(client) {
         console.error('[PR] Failure DM error:', err);
     }
 
-    // TODO: Google Sheets integration — add 1 point to failedUserId.
-    // Hook will be wired once the sheet/endpoint is defined.
-    console.log('[PR][POINT-TODO] Add 1 failure point for user', failedUserId);
+    // Add a sanction point for the failed engagement task
+    try {
+        await points.addPoint(client, failedUserId, {
+            reason: 'Missed engagement post (' + assignment.theme + ')',
+            addedBy: 'system',
+        });
+    } catch (err) {
+        console.error('[PR] Failed to add sanction point:', err);
+    }
 }
 
 // ---- Scheduler ----
