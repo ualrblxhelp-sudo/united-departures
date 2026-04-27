@@ -104,10 +104,13 @@ async function isOnApprovedLeave(userId, date) {
 
 // ---- PR member fetching ----
 // Fetches member IDs that have the PR role.
-// Requires GUILD_MEMBERS privileged intent — both `guild.members.fetch()` and the
-// REST `members.list()` endpoint won't return data without it.
-// We fetch all members ONCE per call (no `userIds` arg) with a hard timeout so
-// a hung request can never block the assignment flow indefinitely.
+// Requires GUILD_MEMBERS privileged intent — both in the Discord developer portal
+// AND in the Client constructor's intents array (GatewayIntentBits.GuildMembers).
+//
+// IMPORTANT: We do NOT rely on `role.members` cache as a shortcut, because the cache
+// is populated lazily as the bot encounters members (slash commands, messages, etc.)
+// and may be missing most of the role at any given time. We always do a full fetch
+// to populate the guild-wide member cache, then read the role's members from there.
 async function fetchPRRoleMemberIds(client) {
     var guild;
     try {
@@ -122,27 +125,24 @@ async function fetchPRRoleMemberIds(client) {
         return [];
     }
 
-    // If the role's member cache has anyone in it, use that — avoids a network round trip.
-    var cached = role.members.map(function(m) { return m.id; });
-    if (cached.length > 0) return cached;
-
-    // Cache miss. Fetch all members with a 30-second timeout.
-    // If this call hangs, it means the bot is missing the GuildMembers intent —
-    // either in the Discord developer portal or in the Client constructor.
+    // Force a full member fetch so the cache is complete. With a 30s timeout safety net.
     try {
         var fetchPromise = guild.members.fetch();
         var timeoutPromise = new Promise(function(_, reject) {
             setTimeout(function() {
-                reject(new Error('members.fetch timed out after 30s — is the GuildMembers privileged intent enabled?'));
+                reject(new Error('members.fetch timed out after 30s — is the GuildMembers privileged intent enabled in BOTH the Discord developer portal AND the bot client constructor?'));
             }, 30 * 1000);
         });
         await Promise.race([fetchPromise, timeoutPromise]);
     } catch (err) {
         console.error('[PR] members.fetch error:', err.message);
-        return [];
+        // Even if fetch failed, fall through to reading whatever cache we have —
+        // better than returning nothing.
     }
 
-    return role.members.map(function(m) { return m.id; });
+    var ids = role.members.map(function(m) { return m.id; });
+    console.log('[PR] Found ' + ids.length + ' member(s) with PR role');
+    return ids;
 }
 
 async function getActivePRMemberIds(client, date, excludeIds) {
