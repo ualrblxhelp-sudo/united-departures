@@ -1,9 +1,9 @@
 const {
     SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
-var Flight = require('../../../models/Flight');
-var { updateAllCalendars } = require('../../../utils/calendar');
-var ids = require('../../../config/ids');
+var Flight = require('../../models/Flight');
+var { updateAllCalendars } = require('../../utils/calendar');
+var ids = require('../../config/ids');
 
 var pendingEnds = new Map();
 

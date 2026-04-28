@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
-var Flight = require('../../../models/Flight');
-var { buildFlightInfoEmbed, buildAllocationEmbed } = require('../../../utils/embed');
-var ids = require('../../../config/ids');
+var Flight = require('../../models/Flight');
+var { buildFlightInfoEmbed, buildAllocationEmbed } = require('../../utils/embed');
+var ids = require('../../config/ids');
 
 module.exports = {
     data: new SlashCommandBuilder()

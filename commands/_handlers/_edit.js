@@ -2,10 +2,10 @@ const {
     SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
     ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
-var Flight = require('../../../models/Flight');
-var { buildFlightInfoEmbed, buildAllocationEmbed } = require('../../../utils/embed');
-var { updateAllCalendars } = require('../../../utils/calendar');
-var ids = require('../../../config/ids');
+var Flight = require('../../models/Flight');
+var { buildFlightInfoEmbed, buildAllocationEmbed } = require('../../utils/embed');
+var { updateAllCalendars } = require('../../utils/calendar');
+var ids = require('../../config/ids');
 
 function parseTimestamp(input) {
     var match = input.match(/<t:(\d+)(?::[tTdDfFR])?>/);

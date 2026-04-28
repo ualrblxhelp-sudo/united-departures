@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const engagement = require('../../../utils/engagement');
+const engagement = require('../../utils/engagement');
 
 var VOLARE_GUILD_ID = '1309560657473179679';
 var MANAGEMENT_ROLE_ID = '1309724300156207216';
