@@ -53,19 +53,19 @@ client.on(Events.InteractionCreate, async function(interaction) {
                 return await client.commands.get('unallocate').handleFlightSelect(interaction);
             }
             if (id === 'delete_flight') {
-                return await client.commands.get('delete').handleFlightSelect(interaction);
+                return await client.commands.get('flight').delete_handleFlightSelect(interaction);
             }
             if (id === 'edit_flight') {
-                return await client.commands.get('edit').handleFlightSelect(interaction);
+                return await client.commands.get('flight').edit_handleFlightSelect(interaction);
             }
             if (id === 'edit_action') {
-                return await client.commands.get('edit').handleActionSelect(interaction);
+                return await client.commands.get('flight').edit_handleActionSelect(interaction);
             }
             if (id === 'edit_unallocate_crew') {
-                return await client.commands.get('edit').handleUnallocateCrew(interaction);
+                return await client.commands.get('flight').edit_handleUnallocateCrew(interaction);
             }
             if (id === 'end_flight') {
-                return await client.commands.get('end').handleFlightSelect(interaction);
+                return await client.commands.get('flight').end_handleFlightSelect(interaction);
             }
             if (id === 'bugreport_type') {
                 return await client.commands.get('bugreport').handleTypeSelect(interaction);
@@ -77,16 +77,16 @@ client.on(Events.InteractionCreate, async function(interaction) {
         if (interaction.isModalSubmit()) {
             var mid = interaction.customId;
             if (mid === 'create_modal') {
-                return await client.commands.get('create').handleModalSubmit(interaction);
+                return await client.commands.get('flight').create_handleModalSubmit(interaction);
             }
             if (mid === 'edit_modal') {
-                return await client.commands.get('edit').handleModalSubmit(interaction);
+                return await client.commands.get('flight').edit_handleModalSubmit(interaction);
             }
             if (mid === 'edit_transfer_modal') {
-                return await client.commands.get('edit').handleTransferModal(interaction);
+                return await client.commands.get('flight').edit_handleTransferModal(interaction);
             }
             if (mid === 'edit_replace_modal') {
-                return await client.commands.get('edit').handleReplaceModal(interaction);
+                return await client.commands.get('flight').edit_handleReplaceModal(interaction);
             }
             if (mid === 'bugreport_modal') {
                 return await client.commands.get('bugreport').handleModalSubmit(interaction);
@@ -103,31 +103,31 @@ client.on(Events.InteractionCreate, async function(interaction) {
         if (interaction.isButton()) {
             var bid = interaction.customId;
             if (bid === 'create_confirm') {
-                return await client.commands.get('create').handleConfirm(interaction);
+                return await client.commands.get('flight').create_handleConfirm(interaction);
             }
             if (bid === 'create_cancel') {
-                return await client.commands.get('create').handleCancel(interaction);
+                return await client.commands.get('flight').create_handleCancel(interaction);
             }
             if (bid === 'delete_confirm') {
-                return await client.commands.get('delete').handleConfirm(interaction);
+                return await client.commands.get('flight').delete_handleConfirm(interaction);
             }
             if (bid === 'delete_cancel') {
-                return await client.commands.get('delete').handleCancel(interaction);
+                return await client.commands.get('flight').delete_handleCancel(interaction);
             }
             if (bid === 'end_confirm') {
-                return await client.commands.get('end').handleConfirm(interaction);
+                return await client.commands.get('flight').end_handleConfirm(interaction);
             }
             if (bid === 'end_cancel') {
-                return await client.commands.get('end').handleCancel(interaction);
+                return await client.commands.get('flight').end_handleCancel(interaction);
             }
             if (bid === 'edit_replace_yes') {
-                return await client.commands.get('edit').handleReplaceYes(interaction);
+                return await client.commands.get('flight').edit_handleReplaceYes(interaction);
             }
             if (bid === 'edit_replace_no') {
-                return await client.commands.get('edit').handleReplaceNo(interaction);
+                return await client.commands.get('flight').edit_handleReplaceNo(interaction);
             }
             if (bid === 'edit_replace_cancel') {
-                return await client.commands.get('edit').handleReplaceCancel(interaction);
+                return await client.commands.get('flight').edit_handleReplaceCancel(interaction);
             }
             if (bid.startsWith('inactivity_approve_')) {
                 var userId = bid.replace('inactivity_approve_', '');
@@ -138,10 +138,10 @@ client.on(Events.InteractionCreate, async function(interaction) {
                 return await client.commands.get('inactivity').handleDeny(interaction, userId);
             }
             if (bid === 'fire_confirm') {
-                return await client.commands.get('fire').handleConfirm(interaction);
+                return await client.commands.get('hr').handleConfirm(interaction);
             }
             if (bid === 'fire_cancel') {
-                return await client.commands.get('fire').handleCancel(interaction);
+                return await client.commands.get('hr').handleCancel(interaction);
             }
             if (bid === 'suggest_up') {
                 return await client.commands.get('suggest').handleVote(interaction, 'up');
