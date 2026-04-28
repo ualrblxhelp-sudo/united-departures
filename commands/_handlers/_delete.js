@@ -1,10 +1,10 @@
 const {
     SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
-var Flight = require('../models/Flight');
-var { buildArchiveEmbed } = require('../utils/embed');
-var { updateAllCalendars } = require('../utils/calendar');
-var ids = require('../config/ids');
+var Flight = require('../../../models/Flight');
+var { buildArchiveEmbed } = require('../../../utils/embed');
+var { updateAllCalendars } = require('../../../utils/calendar');
+var ids = require('../../../config/ids');
 
 var pendingDeletes = new Map();
 
