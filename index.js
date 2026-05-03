@@ -38,19 +38,19 @@ client.on(Events.InteractionCreate, async function(interaction) {
         if (interaction.isStringSelectMenu()) {
             var id = interaction.customId;
             if (id === 'create_type') {
-                return await client.commands.get('create').handleTypeSelect(interaction);
+                return await client.commands.get('flight').create_handleTypeSelect(interaction);
             }
             if (id === 'create_aircraft') {
-                return await client.commands.get('create').handleAircraftSelect(interaction);
+                return await client.commands.get('flight').create_handleAircraftSelect(interaction);
             }
             if (id === 'allocate_flight') {
-                return await client.commands.get('allocate').handleFlightSelect(interaction);
+                return await client.commands.get('flight').allocate_handleFlightSelect(interaction);
             }
             if (id === 'allocate_position') {
-                return await client.commands.get('allocate').handlePositionSelect(interaction);
+                return await client.commands.get('flight').allocate_handlePositionSelect(interaction);
             }
             if (id === 'unallocate_flight') {
-                return await client.commands.get('unallocate').handleFlightSelect(interaction);
+                return await client.commands.get('flight').unallocate_handleFlightSelect(interaction);
             }
             if (id === 'delete_flight') {
                 return await client.commands.get('flight').delete_handleFlightSelect(interaction);
@@ -70,7 +70,6 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (id === 'bugreport_type') {
                 return await client.commands.get('bugreport').handleTypeSelect(interaction);
             }
-            return;
             return;
         }
 
