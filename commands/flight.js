@@ -43,9 +43,16 @@ module.exports = {
 
     // Re-export all button/modal/select handlers so index.js can dispatch them
     // through client.commands.get('flight').handleX(...)
+    create_handleTypeSelect: createHandler.handleTypeSelect,
+    create_handleAircraftSelect: createHandler.handleAircraftSelect,
     create_handleModalSubmit: createHandler.handleModalSubmit,
     create_handleConfirm: createHandler.handleConfirm,
     create_handleCancel: createHandler.handleCancel,
+
+    allocate_handleFlightSelect: allocateHandler.handleFlightSelect,
+    allocate_handlePositionSelect: allocateHandler.handlePositionSelect,
+
+    unallocate_handleFlightSelect: unallocateHandler.handleFlightSelect,
 
     edit_handleFlightSelect: editHandler.handleFlightSelect,
     edit_handleActionSelect: editHandler.handleActionSelect,
