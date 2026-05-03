@@ -1,65 +1,150 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const points = require('../utils/points');
+// utils/points.js — Sanction point helpers
+// Backed by models/PointRecord. Each call to addPoint() inserts one document
+// per point added (so a +3 sanction produces 3 records, all with the same
+// addedAt/expiresAt). Active = removed:false AND expiresAt > now.
 
-var VOLARE_GUILD_ID = '1309560657473179679';
-var MANAGEMENT_ROLE_ID = '1309724300156207216';
+const PointRecord = require('../models/PointRecord');
 
-function formatDate(d) {
-    if (!d) return '?';
-    return '<t:' + Math.floor(new Date(d).getTime() / 1000) + ':D>';
+const VOLARE_GUILD_ID = '1309560657473179679';
+const POINT_LIFETIME_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
+const CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;     // every 6 hours
+
+// Best-effort label for the user. We don't have a real Discord<->Roblox link
+// table, so we use the member's nickname/displayName from the Volare guild
+// (which by community convention matches their Roblox username), falling
+// back to the global Discord username.
+async function resolveLabel(client, discordId) {
+    try {
+        const guild = await client.guilds.fetch(VOLARE_GUILD_ID);
+        const member = await guild.members.fetch(discordId);
+        return member.displayName || member.user.username;
+    } catch (e) {
+        try {
+            const user = await client.users.fetch(discordId);
+            return user.username;
+        } catch (e2) {
+            return 'unknown';
+        }
+    }
+}
+
+async function getActiveRecords(discordId) {
+    return PointRecord.find({
+        discordId: discordId,
+        removed: false,
+        expiresAt: { $gt: new Date() },
+    }).sort({ addedAt: 1 }).lean();
+}
+
+async function getActiveCount(discordId) {
+    return PointRecord.countDocuments({
+        discordId: discordId,
+        removed: false,
+        expiresAt: { $gt: new Date() },
+    });
+}
+
+async function addPoint(client, discordId, opts) {
+    opts = opts || {};
+    const amount = Math.max(1, opts.amount || 1);
+    const reason = opts.reason || 'No reason provided';
+    const addedBy = opts.addedBy || 'system';
+    const addedByUsername = opts.addedByUsername || null;
+
+    try {
+        const robloxUsername = await resolveLabel(client, discordId);
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + POINT_LIFETIME_MS);
+
+        const docs = [];
+        for (let i = 0; i < amount; i++) {
+            docs.push({
+                discordId: discordId,
+                robloxUsername: robloxUsername,
+                reason: reason,
+                addedBy: addedBy,
+                addedByUsername: addedByUsername,
+                addedAt: now,
+                expiresAt: expiresAt,
+            });
+        }
+        await PointRecord.insertMany(docs);
+
+        const total = await getActiveCount(discordId);
+        return { ok: true, total: total, robloxUsername: robloxUsername };
+    } catch (err) {
+        console.error('[Points] addPoint error:', err);
+        return { ok: false, error: err.message };
+    }
+}
+
+async function removePoint(client, discordId, opts) {
+    opts = opts || {};
+    const amount = Math.max(1, opts.amount || 1);
+    const removedBy = opts.removedBy || 'system';
+
+    try {
+        // Remove oldest active points first.
+        const active = await PointRecord.find({
+            discordId: discordId,
+            removed: false,
+            expiresAt: { $gt: new Date() },
+        }).sort({ addedAt: 1 }).limit(amount);
+
+        if (active.length === 0) {
+            return { ok: false, error: 'no active points' };
+        }
+
+        const ids = active.map(function(r) { return r._id; });
+        await PointRecord.updateMany(
+            { _id: { $in: ids } },
+            { $set: { removed: true, removedAt: new Date(), removedBy: removedBy } }
+        );
+
+        const total = await getActiveCount(discordId);
+        return {
+            ok: true,
+            removed: active.length,
+            total: total,
+            robloxUsername: active[0].robloxUsername,
+        };
+    } catch (err) {
+        console.error('[Points] removePoint error:', err);
+        return { ok: false, error: err.message };
+    }
+}
+
+// Periodic sweep that flips expired records' `removed` flag to true.
+// Active queries already filter on expiresAt, so this is bookkeeping —
+// it keeps the active index tight and gives clean audit trails.
+async function expireOldPoints() {
+    try {
+        const result = await PointRecord.updateMany(
+            { removed: false, expiresAt: { $lte: new Date() } },
+            { $set: { removed: true, removedAt: new Date(), removedBy: 'expired' } }
+        );
+        if (result.modifiedCount > 0) {
+            console.log('[Points] Expired ' + result.modifiedCount + ' point(s).');
+        }
+    } catch (err) {
+        console.error('[Points] expireOldPoints error:', err);
+    }
+}
+
+let _cleanupStarted = false;
+function startCleanupScheduler(client) {
+    if (_cleanupStarted) return;
+    _cleanupStarted = true;
+    expireOldPoints();
+    setInterval(expireOldPoints, CLEANUP_INTERVAL_MS);
+    console.log('[Points] Cleanup scheduler started (every 6h).');
 }
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName('points')
-        .setDescription('View an employee\'s active sanction points')
-        .addUserOption(function(opt) {
-            return opt.setName('user').setDescription('Employee (defaults to you)').setRequired(false);
-        }),
-
-    async execute(interaction) {
-        if (interaction.guildId !== VOLARE_GUILD_ID) {
-            return interaction.reply({ content: '<:e_decline:1397829342079483904> This command can only be used in the United Volare server.', ephemeral: true });
-        }
-
-        var target = interaction.options.getUser('user') || interaction.user;
-        var selfCheck = target.id === interaction.user.id;
-
-        if (!selfCheck && !interaction.member.roles.cache.has(MANAGEMENT_ROLE_ID)) {
-            return interaction.reply({ content: '<:e_decline:1397829342079483904> You can only view your own points.', ephemeral: true });
-        }
-
-        await interaction.deferReply({ ephemeral: true });
-
-        var records = await points.getActiveRecords(target.id);
-        var count = records.length;
-
-        var lines = [];
-        lines.push('**Employee:** <@' + target.id + '>');
-        lines.push('**Active points:** ' + count + ' / 9');
-        lines.push('');
-        lines.push('Thresholds: **3** = First Suspension \u00B7 **6** = Second Suspension \u00B7 **9** = Termination');
-
-        if (count > 0) {
-            lines.push('');
-            lines.push('**Active records:**');
-            for (var i = 0; i < Math.min(records.length, 10); i++) {
-                var r = records[i];
-                var addedBy = r.addedBy === 'system' ? 'system' : (r.addedByUsername || '<@' + r.addedBy + '>');
-                lines.push('\u2022 Added ' + formatDate(r.addedAt) + ' \u2014 expires ' + formatDate(r.expiresAt) + ' \u2014 _' + r.reason + '_ (by ' + addedBy + ')');
-            }
-            if (records.length > 10) {
-                lines.push('_\u2026 and ' + (records.length - 10) + ' more_');
-            }
-        }
-
-        var embed = new EmbedBuilder()
-            .setTitle('Sanction Points \u2014 ' + target.username)
-            .setColor(count >= 9 ? 0xC41E3A : count >= 6 ? 0xE67E22 : count >= 3 ? 0xF1C40F : 0x080C96)
-            .setDescription(lines.join('\n'))
-            .setTimestamp()
-            .setFooter({ text: 'United Volare \u2022 Sanction System' });
-
-        await interaction.editReply({ embeds: [embed] });
-    },
+    addPoint: addPoint,
+    removePoint: removePoint,
+    getActiveRecords: getActiveRecords,
+    getActiveCount: getActiveCount,
+    expireOldPoints: expireOldPoints,
+    startCleanupScheduler: startCleanupScheduler,
 };
