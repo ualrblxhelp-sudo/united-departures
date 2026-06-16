@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const engagement = require('./utils/engagement');
+const applications = require('./routes/applications');
 const expressApp = express();
 expressApp.use(express.json());
 
@@ -154,6 +155,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (bid.startsWith('pr_reject_')) {
                 return await engagement.handleReject(interaction);
             }
+            if (bid.startsWith('application_accept_') || bid.startsWith('application_reject_')) {
+                return await applications.handleApplicationDecision(interaction);
+            }
             return;
         }
     } catch (err) {
@@ -255,8 +259,7 @@ async function start() {
     }
 
     // Setup application route
-    var { setupApplicationRoute } = require('./routes/applications');
-    setupApplicationRoute(client, expressApp);
+    applications.setupApplicationRoute(client, expressApp);
 
     // Health check
     expressApp.get('/', function(req, res) { res.send('Bot is running'); });
