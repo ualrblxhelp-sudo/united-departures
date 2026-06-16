@@ -9,6 +9,27 @@ var REJECT_EMOJI = { id: '1408484388681027614', name: 'volare_reject' };
 var CHECK_MARKUP = '<:volare_check:1408484391348605069>';
 var REJECT_MARKUP = '<:volare_reject:1408484388681027614>';
 
+// ---- Acceptance DM content (United blue embeds) ----
+var ACCEPT_WELCOME_TEXT = `<:e_mail:1397829550716616715> **Welcome to the World of United.**
+> <:e_arrow:1406847964655259710>We are thrilled to inform you that, after a thorough evaluation of your application, you have been selected to join our prestigious Aviate program at United Airlines. This is a momentous achievement and an opportunity that is granted to only a select few, marking the beginning of a remarkable journey in your professional growth.
+> 
+> <a:UnitedWindowOpen:1508415229837709332>The Aviate program is designed to provide you with unparalleled development opportunities, tailored to cultivate your skills and expertise in the aviation industry. While we celebrate this noteworthy milestone, it is important to remember that your journey is just beginning. You are not yet a full-time employee; there are crucial steps ahead.
+> 
+> <a:UnitedBoardingPass:1029754764700958820> As a participant in the program, you will undergo a rigorous and intensive training process within your designated department. This training is essential to equip you with the knowledge and competencies necessary for success at United. We expect all participants to demonstrate excellence and commitment throughout this process, as graduation from the training is a prerequisite for moving forward into United's esteemed Volare communications pathway.
+> 
+> <:UnitedSpacer:1297075950974144544> We are genuinely excited about the potential we see in you and look forward to supporting you on this transformative journey. Your dedication and perseverance will be key as you embark on this exciting chapter with us.
+> 
+> **Once again, congratulations on your selection! We can't wait to see you thrive.**
+-# Best Regards,
+-#           Charles Leclerc, President of United Airlines.`;
+
+var ACCEPT_INVITE_TEXT = `<:e_mail:1397829550716616715> **An Invite to Greatness.**
+> <:e_arrow:1406847964655259710>You will now be invited to our esteemed **Aviate** server below. You must join the server, follow all the requirements listed, and begin your training process from there. 
+> 
+> <:e_curser:1397829435717193858> [United Aviate](https://discord.gg/muePg4Tqb4)
+-# <:UnitedPolaris:1298320157424488479> ɢᴏᴏᴅ ʟᴇᴀᴅꜱ ᴛʜᴇ ᴡᴀʏ
+-# <:d_staralliance:1397830727919337493> ᴀ ꜱᴛᴀʀ ᴀʟʟɪᴀɴᴄᴇ ᴍᴇᴍʙᴇʀ`;
+
 async function checkAI(text) {
     if (!text || text.length < 50) return null;
     try {
@@ -83,18 +104,31 @@ async function handleApplicationDecision(interaction) {
         console.error('[Application] decision update error:', err);
     }
 
-    // DM the applicant the outcome (private status report back to the reviewer either way)
+    // Build the DM payload
+    var dmEmbeds;
+    if (accepted) {
+        // Two United-blue embeds: welcome letter + Aviate server invite
+        var welcomeEmbed = new EmbedBuilder()
+            .setColor(EMBED_COLOR)
+            .setDescription(ACCEPT_WELCOME_TEXT);
+        var inviteEmbed = new EmbedBuilder()
+            .setColor(EMBED_COLOR)
+            .setDescription(ACCEPT_INVITE_TEXT);
+        dmEmbeds = [welcomeEmbed, inviteEmbed];
+    } else {
+        var rejectEmbed = new EmbedBuilder()
+            .setColor(color)
+            .setTitle('Application Update')
+            .setDescription('Thank you for applying to United Volare. After careful review, your application was **not successful** this time. You are welcome to reapply in the future.');
+        dmEmbeds = [rejectEmbed];
+    }
+
+    // DM the applicant (private status report back to the reviewer either way)
     var status;
     if (/^\d{15,21}$/.test(applicantId)) {
         try {
             var user = await interaction.client.users.fetch(applicantId);
-            var dmEmbed = new EmbedBuilder()
-                .setColor(color)
-                .setTitle(accepted ? 'Application Accepted' : 'Application Update')
-                .setDescription(accepted
-                    ? 'Congratulations! Your United Volare application has been **accepted**. A staff member will reach out shortly with the next steps.'
-                    : 'Thank you for applying to United Volare. After careful review, your application was **not successful** this time. You are welcome to reapply in the future.');
-            await user.send({ embeds: [dmEmbed] });
+            await user.send({ embeds: dmEmbeds });
             status = CHECK_MARKUP + ' Applicant was notified via DM.';
         } catch (e) {
             status = REJECT_MARKUP + ' Could not DM the applicant (DMs closed or no shared server). Please message them manually.';
