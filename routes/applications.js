@@ -1,7 +1,13 @@
-var { EmbedBuilder, ChannelType } = require('discord.js');
+var { EmbedBuilder, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 var APPLICATION_CATEGORY_ID = '1486496711861080074';
 var EMBED_COLOR = 0x0b0fa8;
+
+// Same accept/reject emojis used elsewhere in the bot
+var CHECK_EMOJI = { id: '1408484391348605069', name: 'volare_check' };
+var REJECT_EMOJI = { id: '1408484388681027614', name: 'volare_reject' };
+var CHECK_MARKUP = '<:volare_check:1408484391348605069>';
+var REJECT_MARKUP = '<:volare_reject:1408484388681027614>';
 
 async function checkAI(text) {
     if (!text || text.length < 50) return null;
@@ -32,6 +38,76 @@ function aiLabel(score) {
     return '\n\uD83E\uDD16 **AI Score: ' + score + '%** \u2014 Likely Human \u2705';
 }
 
+// Builds the Accept / Reject button row. The applicant's Discord ID is baked into
+// each customId so the decision handler can DM them without any lookup.
+function buildReviewRow(applicantId, disabled) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('application_accept_' + applicantId)
+            .setLabel('Accept')
+            .setEmoji(CHECK_EMOJI)
+            .setStyle(ButtonStyle.Success)
+            .setDisabled(!!disabled),
+        new ButtonBuilder()
+            .setCustomId('application_reject_' + applicantId)
+            .setLabel('Reject')
+            .setEmoji(REJECT_EMOJI)
+            .setStyle(ButtonStyle.Danger)
+            .setDisabled(!!disabled),
+    );
+}
+
+// Called from the index.js interaction dispatcher when an Accept/Reject button is pressed.
+// Updates the review message, then DMs the applicant the outcome.
+async function handleApplicationDecision(interaction) {
+    var cid = interaction.customId;
+    var accepted = cid.indexOf('application_accept_') === 0;
+    var applicantId = cid.replace('application_accept_', '').replace('application_reject_', '');
+
+    var emoji = accepted ? CHECK_MARKUP : REJECT_MARKUP;
+    var word = accepted ? 'Accepted' : 'Rejected';
+    var color = accepted ? 0x2ecc71 : 0xe74c3c;
+
+    // Update the review embed + disable both buttons so it can't be double-actioned
+    var baseEmbed = interaction.message.embeds[0]
+        ? EmbedBuilder.from(interaction.message.embeds[0])
+        : new EmbedBuilder().setTitle('Review Actions');
+    baseEmbed
+        .setColor(color)
+        .setDescription(emoji + ' Application **' + word + '** by ' + interaction.user +
+            '\n<t:' + Math.floor(Date.now() / 1000) + ':F>');
+
+    try {
+        await interaction.update({ embeds: [baseEmbed], components: [buildReviewRow(applicantId, true)] });
+    } catch (err) {
+        console.error('[Application] decision update error:', err);
+    }
+
+    // DM the applicant the outcome (private status report back to the reviewer either way)
+    var status;
+    if (/^\d{15,21}$/.test(applicantId)) {
+        try {
+            var user = await interaction.client.users.fetch(applicantId);
+            var dmEmbed = new EmbedBuilder()
+                .setColor(color)
+                .setTitle(accepted ? 'Application Accepted' : 'Application Update')
+                .setDescription(accepted
+                    ? 'Congratulations! Your United Volare application has been **accepted**. A staff member will reach out shortly with the next steps.'
+                    : 'Thank you for applying to United Volare. After careful review, your application was **not successful** this time. You are welcome to reapply in the future.');
+            await user.send({ embeds: [dmEmbed] });
+            status = CHECK_MARKUP + ' Applicant was notified via DM.';
+        } catch (e) {
+            status = REJECT_MARKUP + ' Could not DM the applicant (DMs closed or no shared server). Please message them manually.';
+        }
+    } else {
+        status = REJECT_MARKUP + ' No valid Discord ID on file for this applicant, so no DM was sent.';
+    }
+
+    try {
+        await interaction.followUp({ content: status, ephemeral: true });
+    } catch (e) {}
+}
+
 function setupApplicationRoute(client, app) {
     app.post('/api/application', async function(req, res) {
         try {
@@ -60,11 +136,15 @@ function setupApplicationRoute(client, app) {
                 return res.status(409).json({ error: 'Application channel already exists' });
             }
 
+            // Discord ID now comes straight from the form. Strip anything non-numeric
+            // (handles pasted <@id>, spaces, etc.). Falls back to 'unknown' if absent.
+            var applicantId = (data.discordId || '').toString().replace(/\D/g, '') || 'unknown';
+
             var channel = await guild.channels.create({
                 name: channelName,
                 type: ChannelType.GuildText,
                 parent: APPLICATION_CATEGORY_ID,
-                topic: data.department + ' \u2022 Discord: ' + data.discordUsername + ' \u2022 Roblox: ' + data.robloxUsername,
+                topic: data.department + ' \u2022 Discord: ' + data.discordUsername + ' \u2022 ID: ' + applicantId + ' \u2022 Roblox: ' + data.robloxUsername,
             });
 
             // Header embed
@@ -73,6 +153,7 @@ function setupApplicationRoute(client, app) {
                 .setColor(EMBED_COLOR)
                 .setDescription(
                     '**Applicant:** ' + data.discordUsername + '\n' +
+                    '**Discord ID:** ' + (applicantId === 'unknown' ? 'N/A' : applicantId) + '\n' +
                     '**Roblox:** ' + data.robloxUsername + '\n' +
                     '**Email:** ' + data.email + '\n' +
                     '**Submitted:** ' + data.timestamp
@@ -131,18 +212,15 @@ function setupApplicationRoute(client, app) {
                 await channel.send({ embeds: [deptEmbed] });
             }
 
-            // Review actions embed
+            // Review actions embed with Accept / Reject buttons
             var summaryEmbed = new EmbedBuilder()
                 .setTitle('Review Actions')
                 .setColor(EMBED_COLOR)
-                .setDescription('React to this message to indicate your decision:\n\n<:volare_check:1408484391348605069> Accept\n<:volare_reject:1408484388681027614> Deny');
-            var summaryMsg = await channel.send({ embeds: [summaryEmbed] });
-            try {
-                await summaryMsg.react('<:volare_check:1408484391348605069>');
-                await summaryMsg.react('<:volare_reject:1408484388681027614>');
-            } catch (reactErr) {
-                console.error('[Application] React error:', reactErr);
-            }
+                .setDescription('Use the buttons below to record your decision.' +
+                    (applicantId === 'unknown'
+                        ? '\n\n\u26A0\uFE0F No Discord ID was provided on this application, so the applicant cannot be auto-DM\'d.'
+                        : ''));
+            await channel.send({ embeds: [summaryEmbed], components: [buildReviewRow(applicantId, false)] });
 
             console.log('[Application] Channel created: ' + channelName);
             res.json({ success: true, channelId: channel.id });
@@ -154,4 +232,4 @@ function setupApplicationRoute(client, app) {
     });
 }
 
-module.exports = { setupApplicationRoute };
+module.exports = { setupApplicationRoute, handleApplicationDecision };
