@@ -1,6 +1,7 @@
-var { EmbedBuilder, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+var { EmbedBuilder, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 
 var APPLICATION_CATEGORY_ID = '1486496711861080074';
+var ARCHIVE_CHANNEL_ID = '1516414213231476797';
 var EMBED_COLOR = 0x0b0fa8;
 
 // Same accept/reject emojis used elsewhere in the bot
@@ -67,27 +68,120 @@ function buildReviewRow(applicantId, disabled) {
             .setCustomId('application_accept_' + applicantId)
             .setLabel('Accept')
             .setEmoji(CHECK_EMOJI)
-            .setStyle(ButtonStyle.Success)
+            .setStyle(ButtonStyle.Secondary)
             .setDisabled(!!disabled),
         new ButtonBuilder()
             .setCustomId('application_reject_' + applicantId)
             .setLabel('Reject')
             .setEmoji(REJECT_EMOJI)
-            .setStyle(ButtonStyle.Danger)
+            .setStyle(ButtonStyle.Secondary)
             .setDisabled(!!disabled),
     );
 }
 
+// Builds the "Review Actions" embed shown above the buttons. Shared by the route and the migration command.
+function buildReviewEmbed(applicantId) {
+    return new EmbedBuilder()
+        .setTitle('Review Actions')
+        .setColor(EMBED_COLOR)
+        .setDescription('Use the buttons below to record your decision.' +
+            (applicantId === 'unknown'
+                ? '\n\n\u26A0\uFE0F No Discord ID on file for this application, so the applicant cannot be auto-DM\'d on accept.'
+                : ''));
+}
+
+// Serializes every message in an application channel into a readable plain-text transcript.
+async function buildTranscript(channel) {
+    var lines = [];
+    lines.push('==== UNITED VOLARE APPLICATION ARCHIVE ====');
+    lines.push('Channel: #' + channel.name + ' (' + channel.id + ')');
+    if (channel.topic) lines.push('Topic: ' + channel.topic);
+    lines.push('Archived: ' + new Date().toISOString());
+    lines.push('===========================================');
+    lines.push('');
+
+    var fetched = await channel.messages.fetch({ limit: 100 });
+    var msgs = Array.from(fetched.values()).reverse(); // oldest -> newest
+
+    for (var i = 0; i < msgs.length; i++) {
+        var m = msgs[i];
+        var stamp = new Date(m.createdTimestamp).toISOString();
+        var author = m.author ? (m.author.tag || m.author.username) : 'Unknown';
+        lines.push('[' + stamp + '] ' + author + ':');
+
+        if (m.content) lines.push(m.content);
+
+        for (var j = 0; j < m.embeds.length; j++) {
+            var emb = m.embeds[j];
+            if (emb.title) lines.push('  # ' + emb.title);
+            if (emb.description) lines.push('  ' + emb.description.split('\n').join('\n  '));
+            if (emb.fields && emb.fields.length) {
+                for (var k = 0; k < emb.fields.length; k++) {
+                    lines.push('  - ' + emb.fields[k].name + ': ' + emb.fields[k].value.split('\n').join(' '));
+                }
+            }
+            if (emb.footer && emb.footer.text) lines.push('  (' + emb.footer.text + ')');
+        }
+        lines.push('');
+    }
+
+    return lines.join('\n');
+}
+
+// Reject flow: archive the channel to a .txt in the archive channel, then delete the channel.
+// Deletion only happens if the archive upload succeeds, so an application is never lost.
+async function handleReject(interaction) {
+    try { await interaction.deferUpdate(); } catch (e) {}
+
+    var channel = interaction.channel;
+
+    try {
+        var transcript = await buildTranscript(channel);
+        var fileName = 'application-' + channel.name + '-' + Date.now() + '.txt';
+        var attachment = new AttachmentBuilder(Buffer.from(transcript, 'utf8'), { name: fileName });
+
+        var archiveChannel = await interaction.client.channels.fetch(ARCHIVE_CHANNEL_ID);
+        await archiveChannel.send({
+            content: REJECT_MARKUP + ' Application rejected and archived: **' + channel.name + '** \u2014 by ' + interaction.user,
+            files: [attachment],
+        });
+    } catch (err) {
+        console.error('[Application] archive error:', err);
+        try {
+            await interaction.followUp({
+                content: REJECT_MARKUP + ' Failed to archive this application, so the channel was **not** deleted. Check the bot logs / archive-channel permissions.',
+                ephemeral: true,
+            });
+        } catch (e) {}
+        return; // do not delete if archiving failed
+    }
+
+    try {
+        await channel.delete('Application rejected by ' + interaction.user.tag);
+    } catch (err) {
+        console.error('[Application] channel delete error:', err);
+        try {
+            await interaction.followUp({
+                content: REJECT_MARKUP + ' Archived successfully, but I couldn\'t delete the channel (missing Manage Channels?). Please remove it manually.',
+                ephemeral: true,
+            });
+        } catch (e) {}
+    }
+}
+
 // Called from the index.js interaction dispatcher when an Accept/Reject button is pressed.
-// Updates the review message, then DMs the applicant the outcome.
 async function handleApplicationDecision(interaction) {
     var cid = interaction.customId;
     var accepted = cid.indexOf('application_accept_') === 0;
     var applicantId = cid.replace('application_accept_', '').replace('application_reject_', '');
 
-    var emoji = accepted ? CHECK_MARKUP : REJECT_MARKUP;
-    var word = accepted ? 'Accepted' : 'Rejected';
-    var color = accepted ? 0x2ecc71 : 0xe74c3c;
+    // Reject => archive + delete (no DM)
+    if (!accepted) {
+        return await handleReject(interaction);
+    }
+
+    // ===== ACCEPT FLOW =====
+    var color = 0x2ecc71;
 
     // Update the review embed + disable both buttons so it can't be double-actioned
     var baseEmbed = interaction.message.embeds[0]
@@ -95,7 +189,7 @@ async function handleApplicationDecision(interaction) {
         : new EmbedBuilder().setTitle('Review Actions');
     baseEmbed
         .setColor(color)
-        .setDescription(emoji + ' Application **' + word + '** by ' + interaction.user +
+        .setDescription(CHECK_MARKUP + ' Application **Accepted** by ' + interaction.user +
             '\n<t:' + Math.floor(Date.now() / 1000) + ':F>');
 
     try {
@@ -104,31 +198,15 @@ async function handleApplicationDecision(interaction) {
         console.error('[Application] decision update error:', err);
     }
 
-    // Build the DM payload
-    var dmEmbeds;
-    if (accepted) {
-        // Two United-blue embeds: welcome letter + Aviate server invite
-        var welcomeEmbed = new EmbedBuilder()
-            .setColor(EMBED_COLOR)
-            .setDescription(ACCEPT_WELCOME_TEXT);
-        var inviteEmbed = new EmbedBuilder()
-            .setColor(EMBED_COLOR)
-            .setDescription(ACCEPT_INVITE_TEXT);
-        dmEmbeds = [welcomeEmbed, inviteEmbed];
-    } else {
-        var rejectEmbed = new EmbedBuilder()
-            .setColor(color)
-            .setTitle('Application Update')
-            .setDescription('Thank you for applying to United Volare. After careful review, your application was **not successful** this time. You are welcome to reapply in the future.');
-        dmEmbeds = [rejectEmbed];
-    }
+    // Two United-blue embeds: welcome letter + Aviate server invite
+    var welcomeEmbed = new EmbedBuilder().setColor(EMBED_COLOR).setDescription(ACCEPT_WELCOME_TEXT);
+    var inviteEmbed = new EmbedBuilder().setColor(EMBED_COLOR).setDescription(ACCEPT_INVITE_TEXT);
 
-    // DM the applicant (private status report back to the reviewer either way)
     var status;
     if (/^\d{15,21}$/.test(applicantId)) {
         try {
             var user = await interaction.client.users.fetch(applicantId);
-            await user.send({ embeds: dmEmbeds });
+            await user.send({ embeds: [welcomeEmbed, inviteEmbed] });
             status = CHECK_MARKUP + ' Applicant was notified via DM.';
         } catch (e) {
             status = REJECT_MARKUP + ' Could not DM the applicant (DMs closed or no shared server). Please message them manually.';
@@ -247,14 +325,7 @@ function setupApplicationRoute(client, app) {
             }
 
             // Review actions embed with Accept / Reject buttons
-            var summaryEmbed = new EmbedBuilder()
-                .setTitle('Review Actions')
-                .setColor(EMBED_COLOR)
-                .setDescription('Use the buttons below to record your decision.' +
-                    (applicantId === 'unknown'
-                        ? '\n\n\u26A0\uFE0F No Discord ID was provided on this application, so the applicant cannot be auto-DM\'d.'
-                        : ''));
-            await channel.send({ embeds: [summaryEmbed], components: [buildReviewRow(applicantId, false)] });
+            await channel.send({ embeds: [buildReviewEmbed(applicantId)], components: [buildReviewRow(applicantId, false)] });
 
             console.log('[Application] Channel created: ' + channelName);
             res.json({ success: true, channelId: channel.id });
@@ -266,4 +337,4 @@ function setupApplicationRoute(client, app) {
     });
 }
 
-module.exports = { setupApplicationRoute, handleApplicationDecision };
+module.exports = { setupApplicationRoute, handleApplicationDecision, buildReviewRow, buildReviewEmbed, APPLICATION_CATEGORY_ID };
