@@ -1,7 +1,7 @@
 var { EmbedBuilder, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 
 var APPLICATION_CATEGORY_ID = '1486496711861080074';
-var ARCHIVE_CHANNEL_ID = '1516414213231476797';
+var ARCHIVE_CHANNEL_ID = '1516838508915068949';
 var EMBED_COLOR = 0x0b0fa8;
 
 // Same accept/reject emojis used elsewhere in the bot
@@ -91,11 +91,12 @@ function buildReviewEmbed(applicantId) {
 }
 
 // Serializes every message in an application channel into a readable plain-text transcript.
-async function buildTranscript(channel) {
+async function buildTranscript(channel, decisionLine) {
     var lines = [];
     lines.push('==== UNITED VOLARE APPLICATION ARCHIVE ====');
     lines.push('Channel: #' + channel.name + ' (' + channel.id + ')');
     if (channel.topic) lines.push('Topic: ' + channel.topic);
+    if (decisionLine) lines.push('Decision: ' + decisionLine);
     lines.push('Archived: ' + new Date().toISOString());
     lines.push('===========================================');
     lines.push('');
@@ -128,7 +129,26 @@ async function buildTranscript(channel) {
     return lines.join('\n');
 }
 
-// Reject flow: archive the channel to a .txt in the archive channel, then delete the channel.
+// Archives an application channel to a .txt in ARCHIVE_CHANNEL_ID, recording the decision
+// and WHO clicked the button. Throws on failure so callers can decide what to do next.
+async function archiveApplication(interaction, decision) {
+    var channel = interaction.channel;
+    var who = interaction.user;
+    var decisionLine = decision + ' by ' + (who.tag || who.username) + ' (' + who.id + ') at ' + new Date().toISOString();
+
+    var transcript = await buildTranscript(channel, decisionLine);
+    var fileName = 'application-' + channel.name + '-' + decision.toLowerCase() + '-' + Date.now() + '.txt';
+    var attachment = new AttachmentBuilder(Buffer.from(transcript, 'utf8'), { name: fileName });
+
+    var mark = (decision === 'ACCEPTED') ? CHECK_MARKUP : REJECT_MARKUP;
+    var archiveChannel = await interaction.client.channels.fetch(ARCHIVE_CHANNEL_ID);
+    await archiveChannel.send({
+        content: mark + ' Application **' + decision + '** \u2014 `' + channel.name + '` \u2014 clicked by ' + who,
+        files: [attachment],
+    });
+}
+
+// Reject flow: archive the channel (recording who clicked), then delete the channel.
 // Deletion only happens if the archive upload succeeds, so an application is never lost.
 async function handleReject(interaction) {
     try { await interaction.deferUpdate(); } catch (e) {}
@@ -136,15 +156,7 @@ async function handleReject(interaction) {
     var channel = interaction.channel;
 
     try {
-        var transcript = await buildTranscript(channel);
-        var fileName = 'application-' + channel.name + '-' + Date.now() + '.txt';
-        var attachment = new AttachmentBuilder(Buffer.from(transcript, 'utf8'), { name: fileName });
-
-        var archiveChannel = await interaction.client.channels.fetch(ARCHIVE_CHANNEL_ID);
-        await archiveChannel.send({
-            content: REJECT_MARKUP + ' Application rejected and archived: **' + channel.name + '** \u2014 by ' + interaction.user,
-            files: [attachment],
-        });
+        await archiveApplication(interaction, 'REJECTED');
     } catch (err) {
         console.error('[Application] archive error:', err);
         try {
@@ -181,14 +193,12 @@ async function handleApplicationDecision(interaction) {
     }
 
     // ===== ACCEPT FLOW =====
-    var color = 0x2ecc71;
-
     // Update the review embed + disable both buttons so it can't be double-actioned
     var baseEmbed = interaction.message.embeds[0]
         ? EmbedBuilder.from(interaction.message.embeds[0])
         : new EmbedBuilder().setTitle('Review Actions');
     baseEmbed
-        .setColor(color)
+        .setColor(0x2ecc71)
         .setDescription(CHECK_MARKUP + ' Application **Accepted** by ' + interaction.user +
             '\n<t:' + Math.floor(Date.now() / 1000) + ':F>');
 
@@ -198,25 +208,35 @@ async function handleApplicationDecision(interaction) {
         console.error('[Application] decision update error:', err);
     }
 
-    // Two United-blue embeds: welcome letter + Aviate server invite
+    // DM the applicant the two United-blue embeds (welcome letter + Aviate invite)
     var welcomeEmbed = new EmbedBuilder().setColor(EMBED_COLOR).setDescription(ACCEPT_WELCOME_TEXT);
     var inviteEmbed = new EmbedBuilder().setColor(EMBED_COLOR).setDescription(ACCEPT_INVITE_TEXT);
 
-    var status;
+    var dmStatus;
     if (/^\d{15,21}$/.test(applicantId)) {
         try {
             var user = await interaction.client.users.fetch(applicantId);
             await user.send({ embeds: [welcomeEmbed, inviteEmbed] });
-            status = CHECK_MARKUP + ' Applicant was notified via DM.';
+            dmStatus = CHECK_MARKUP + ' Applicant was notified via DM.';
         } catch (e) {
-            status = REJECT_MARKUP + ' Could not DM the applicant (DMs closed or no shared server). Please message them manually.';
+            dmStatus = REJECT_MARKUP + ' Could not DM the applicant (DMs closed or no shared server). Please message them manually.';
         }
     } else {
-        status = REJECT_MARKUP + ' No valid Discord ID on file for this applicant, so no DM was sent.';
+        dmStatus = REJECT_MARKUP + ' No valid Discord ID on file for this applicant, so no DM was sent.';
+    }
+
+    // Archive the application (records who clicked). Channel is NOT deleted on accept.
+    var archiveStatus;
+    try {
+        await archiveApplication(interaction, 'ACCEPTED');
+        archiveStatus = CHECK_MARKUP + ' Application archived.';
+    } catch (err) {
+        console.error('[Application] archive error:', err);
+        archiveStatus = REJECT_MARKUP + ' Failed to archive the application (check archive-channel permissions).';
     }
 
     try {
-        await interaction.followUp({ content: status, ephemeral: true });
+        await interaction.followUp({ content: dmStatus + '\n' + archiveStatus, ephemeral: true });
     } catch (e) {}
 }
 
