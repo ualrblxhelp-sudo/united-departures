@@ -1,7 +1,7 @@
 var { EmbedBuilder, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 
 var APPLICATION_CATEGORY_ID = '1486496711861080074';
-var ARCHIVE_CHANNEL_ID = '1516838508915068949';
+var ARCHIVE_CHANNEL_ID = '1516838508915068949'; // log channel for accepted/rejected application archives
 var EMBED_COLOR = 0x0b0fa8;
 
 // Same accept/reject emojis used elsewhere in the bot
@@ -129,9 +129,9 @@ async function buildTranscript(channel, decisionLine) {
     return lines.join('\n');
 }
 
-// Archives an application channel to a .txt in ARCHIVE_CHANNEL_ID, recording the decision
-// and WHO clicked the button. Throws on failure so callers can decide what to do next.
-async function archiveApplication(interaction, decision) {
+// Archives an application channel to a .txt in the log channel, recording the decision and
+// WHO clicked the button (plus an optional extra note). Throws on failure so callers decide next steps.
+async function archiveApplication(interaction, decision, extraNote) {
     var channel = interaction.channel;
     var who = interaction.user;
     var decisionLine = decision + ' by ' + (who.tag || who.username) + ' (' + who.id + ') at ' + new Date().toISOString();
@@ -141,15 +141,15 @@ async function archiveApplication(interaction, decision) {
     var attachment = new AttachmentBuilder(Buffer.from(transcript, 'utf8'), { name: fileName });
 
     var mark = (decision === 'ACCEPTED') ? CHECK_MARKUP : REJECT_MARKUP;
+    var content = mark + ' Application **' + decision + '** \u2014 `' + channel.name + '` \u2014 clicked by ' + who;
+    if (extraNote) content += '\n' + extraNote;
+
     var archiveChannel = await interaction.client.channels.fetch(ARCHIVE_CHANNEL_ID);
-    await archiveChannel.send({
-        content: mark + ' Application **' + decision + '** \u2014 `' + channel.name + '` \u2014 clicked by ' + who,
-        files: [attachment],
-    });
+    await archiveChannel.send({ content: content, files: [attachment] });
 }
 
-// Reject flow: archive the channel (recording who clicked), then delete the channel.
-// Deletion only happens if the archive upload succeeds, so an application is never lost.
+// Reject flow: log the application (recording who clicked), then delete the channel.
+// Deletion only happens if the log upload succeeds, so an application is never lost.
 async function handleReject(interaction) {
     try { await interaction.deferUpdate(); } catch (e) {}
 
@@ -161,11 +161,11 @@ async function handleReject(interaction) {
         console.error('[Application] archive error:', err);
         try {
             await interaction.followUp({
-                content: REJECT_MARKUP + ' Failed to archive this application, so the channel was **not** deleted. Check the bot logs / archive-channel permissions.',
+                content: REJECT_MARKUP + ' Failed to log this application, so the channel was **not** deleted. Check the bot logs / log-channel permissions.',
                 ephemeral: true,
             });
         } catch (e) {}
-        return; // do not delete if archiving failed
+        return; // do not delete if logging failed
     }
 
     try {
@@ -174,39 +174,19 @@ async function handleReject(interaction) {
         console.error('[Application] channel delete error:', err);
         try {
             await interaction.followUp({
-                content: REJECT_MARKUP + ' Archived successfully, but I couldn\'t delete the channel (missing Manage Channels?). Please remove it manually.',
+                content: REJECT_MARKUP + ' Logged successfully, but I couldn\'t delete the channel (missing Manage Channels?). Please remove it manually.',
                 ephemeral: true,
             });
         } catch (e) {}
     }
 }
 
-// Called from the index.js interaction dispatcher when an Accept/Reject button is pressed.
-async function handleApplicationDecision(interaction) {
-    var cid = interaction.customId;
-    var accepted = cid.indexOf('application_accept_') === 0;
-    var applicantId = cid.replace('application_accept_', '').replace('application_reject_', '');
+// Accept flow: DM the applicant, log the application (recording who clicked + DM status),
+// then delete the channel. Deletion only happens if the log upload succeeds.
+async function handleAccept(interaction, applicantId) {
+    try { await interaction.deferUpdate(); } catch (e) {}
 
-    // Reject => archive + delete (no DM)
-    if (!accepted) {
-        return await handleReject(interaction);
-    }
-
-    // ===== ACCEPT FLOW =====
-    // Update the review embed + disable both buttons so it can't be double-actioned
-    var baseEmbed = interaction.message.embeds[0]
-        ? EmbedBuilder.from(interaction.message.embeds[0])
-        : new EmbedBuilder().setTitle('Review Actions');
-    baseEmbed
-        .setColor(0x2ecc71)
-        .setDescription(CHECK_MARKUP + ' Application **Accepted** by ' + interaction.user +
-            '\n<t:' + Math.floor(Date.now() / 1000) + ':F>');
-
-    try {
-        await interaction.update({ embeds: [baseEmbed], components: [buildReviewRow(applicantId, true)] });
-    } catch (err) {
-        console.error('[Application] decision update error:', err);
-    }
+    var channel = interaction.channel;
 
     // DM the applicant the two United-blue embeds (welcome letter + Aviate invite)
     var welcomeEmbed = new EmbedBuilder().setColor(EMBED_COLOR).setDescription(ACCEPT_WELCOME_TEXT);
@@ -219,25 +199,49 @@ async function handleApplicationDecision(interaction) {
             await user.send({ embeds: [welcomeEmbed, inviteEmbed] });
             dmStatus = CHECK_MARKUP + ' Applicant was notified via DM.';
         } catch (e) {
-            dmStatus = REJECT_MARKUP + ' Could not DM the applicant (DMs closed or no shared server). Please message them manually.';
+            dmStatus = REJECT_MARKUP + ' Could not DM the applicant (DMs closed or no shared server) \u2014 message them manually.';
         }
     } else {
-        dmStatus = REJECT_MARKUP + ' No valid Discord ID on file for this applicant, so no DM was sent.';
+        dmStatus = REJECT_MARKUP + ' No valid Discord ID on file \u2014 no DM was sent.';
     }
 
-    // Archive the application (records who clicked). Channel is NOT deleted on accept.
-    var archiveStatus;
+    // Log to the log channel (records who clicked + DM status), then delete the channel
     try {
-        await archiveApplication(interaction, 'ACCEPTED');
-        archiveStatus = CHECK_MARKUP + ' Application archived.';
+        await archiveApplication(interaction, 'ACCEPTED', dmStatus);
     } catch (err) {
         console.error('[Application] archive error:', err);
-        archiveStatus = REJECT_MARKUP + ' Failed to archive the application (check archive-channel permissions).';
+        try {
+            await interaction.followUp({
+                content: REJECT_MARKUP + ' Accepted and DMed, but failed to log the application, so the channel was **not** deleted. Check the bot logs / log-channel permissions.',
+                ephemeral: true,
+            });
+        } catch (e) {}
+        return; // do not delete if logging failed
     }
 
     try {
-        await interaction.followUp({ content: dmStatus + '\n' + archiveStatus, ephemeral: true });
-    } catch (e) {}
+        await channel.delete('Application accepted by ' + interaction.user.tag);
+    } catch (err) {
+        console.error('[Application] channel delete error:', err);
+        try {
+            await interaction.followUp({
+                content: REJECT_MARKUP + ' Logged successfully, but I couldn\'t delete the channel (missing Manage Channels?). Please remove it manually.',
+                ephemeral: true,
+            });
+        } catch (e) {}
+    }
+}
+
+// Called from the index.js interaction dispatcher when an Accept/Reject button is pressed.
+async function handleApplicationDecision(interaction) {
+    var cid = interaction.customId;
+    var accepted = cid.indexOf('application_accept_') === 0;
+    var applicantId = cid.replace('application_accept_', '').replace('application_reject_', '');
+
+    if (accepted) {
+        return await handleAccept(interaction, applicantId);
+    }
+    return await handleReject(interaction);
 }
 
 // Tracks application channels currently being created, so a double-fired webhook
