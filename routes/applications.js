@@ -240,8 +240,14 @@ async function handleApplicationDecision(interaction) {
     } catch (e) {}
 }
 
+// Tracks application channels currently being created, so a double-fired webhook
+// (e.g. a duplicate Apps Script trigger) can't race past the existence check and
+// create two channels for the same applicant.
+var creating = new Set();
+
 function setupApplicationRoute(client, app) {
     app.post('/api/application', async function(req, res) {
+        var lockedName = null;
         try {
             var data = req.body;
 
@@ -264,9 +270,11 @@ function setupApplicationRoute(client, app) {
             var existing = guild.channels.cache.find(function(ch) {
                 return ch.parentId === APPLICATION_CATEGORY_ID && ch.name === channelName;
             });
-            if (existing) {
-                return res.status(409).json({ error: 'Application channel already exists' });
+            if (existing || creating.has(channelName)) {
+                return res.status(409).json({ error: 'Application channel already exists or is being created' });
             }
+            creating.add(channelName);
+            lockedName = channelName;
 
             // Discord ID now comes straight from the form. Strip anything non-numeric
             // (handles pasted <@id>, spaces, etc.). Falls back to 'unknown' if absent.
@@ -353,6 +361,8 @@ function setupApplicationRoute(client, app) {
         } catch (err) {
             console.error('[Application] Error:', err);
             res.status(500).json({ error: 'Internal error' });
+        } finally {
+            if (lockedName) creating.delete(lockedName);
         }
     });
 }
