@@ -92,6 +92,30 @@ function shuffle(arr) {
     return arr;
 }
 
+function sleep(ms) {
+    return new Promise(function(resolve) { setTimeout(resolve, ms); });
+}
+
+// Resolves with the fetched members, or rejects if it takes longer than `ms`.
+// A rejection here means we must NOT trust the cache (it may be partial).
+function fetchAllMembersWithTimeout(guild, ms) {
+    return new Promise(function(resolve, reject) {
+        var done = false;
+        var timer = setTimeout(function() {
+            if (done) return;
+            done = true;
+            reject(new Error('members.fetch timed out after ' + Math.round(ms / 1000) + 's'));
+        }, ms);
+        guild.members.fetch().then(function(res) {
+            if (done) return;
+            done = true; clearTimeout(timer); resolve(res);
+        }, function(err) {
+            if (done) return;
+            done = true; clearTimeout(timer); reject(err);
+        });
+    });
+}
+
 // ---- Leave checking ----
 async function isOnApprovedLeave(userId, date) {
     var leave = await LeaveOfAbsence.findOne({
@@ -104,57 +128,74 @@ async function isOnApprovedLeave(userId, date) {
 
 // ---- PR member fetching ----
 // Fetches member IDs that have the PR role.
-// Requires GUILD_MEMBERS privileged intent — both in the Discord developer portal
+// Requires the GuildMembers privileged intent — both in the Discord developer portal
 // AND in the Client constructor's intents array (GatewayIntentBits.GuildMembers).
 //
-// IMPORTANT: We do NOT rely on `role.members` cache as a shortcut, because the cache
-// is populated lazily as the bot encounters members (slash commands, messages, etc.)
-// and may be missing most of the role at any given time. We always do a full fetch
-// to populate the guild-wide member cache, then read the role's members from there.
+// Returns { ok, ids, reason }.
+//  - ok:true  -> the full guild member list was fetched and `ids` is trustworthy.
+//  - ok:false -> the fetch could not be completed reliably; `ids` is empty and the
+//                caller MUST NOT build a schedule from it (that is what used to collapse
+//                the rotation onto whoever happened to be cached, i.e. the owner).
+//
+// We never read `role.members` off a partial cache. role.members is derived from the
+// guild-wide member cache, which is populated lazily; without a verified full fetch it
+// contains mostly recently-active users.
 async function fetchPRRoleMemberIds(client) {
     var guild;
     try {
         guild = await client.guilds.fetch(VOLARE_GUILD_ID);
     } catch (err) {
-        console.error('[PR] Failed to fetch Volare guild:', err);
-        return [];
+        console.error('[PR] Failed to fetch Volare guild:', err && err.message);
+        return { ok: false, ids: [], reason: 'could not reach the Volare guild' };
     }
+
     var role = guild.roles.cache.get(PR_ROLE_ID) || await guild.roles.fetch(PR_ROLE_ID).catch(function() { return null; });
     if (!role) {
         console.error('[PR] PR role not found');
-        return [];
+        return { ok: false, ids: [], reason: 'PR role `' + PR_ROLE_ID + '` not found in the guild' };
     }
 
-    // Force a full member fetch so the cache is complete. With a 30s timeout safety net.
-    try {
-        var fetchPromise = guild.members.fetch();
-        var timeoutPromise = new Promise(function(_, reject) {
-            setTimeout(function() {
-                reject(new Error('members.fetch timed out after 30s — is the GuildMembers privileged intent enabled in BOTH the Discord developer portal AND the bot client constructor?'));
-            }, 30 * 1000);
-        });
-        await Promise.race([fetchPromise, timeoutPromise]);
-    } catch (err) {
-        console.error('[PR] members.fetch error:', err.message);
-        // Even if fetch failed, fall through to reading whatever cache we have —
-        // better than returning nothing.
+    // Retry the full fetch up to 3 times (60s each). The cache is coldest right after a
+    // restart, so we give it room and back off between attempts.
+    var fetched = false;
+    var lastErr = null;
+    for (var attempt = 1; attempt <= 3 && !fetched; attempt++) {
+        try {
+            await fetchAllMembersWithTimeout(guild, 60 * 1000);
+            fetched = true;
+        } catch (err) {
+            lastErr = (err && err.message) ? err.message : String(err);
+            console.error('[PR] members.fetch attempt ' + attempt + '/3 failed: ' + lastErr);
+            if (attempt < 3) await sleep(2000 * attempt);
+        }
+    }
+
+    if (!fetched) {
+        return {
+            ok: false,
+            ids: [],
+            reason: 'could not fully fetch the member list (' + (lastErr || 'timeout') + '). ' +
+                    'Verify the GuildMembers privileged intent and run /prteam to inspect.',
+        };
     }
 
     var ids = role.members.map(function(m) { return m.id; });
-    console.log('[PR] Found ' + ids.length + ' member(s) with PR role');
-    return ids;
+    console.log('[PR] Found ' + ids.length + ' member(s) with PR role (guild has ' + guild.memberCount + ' total).');
+    return { ok: true, ids: ids, reason: '' };
 }
 
 async function getActivePRMemberIds(client, date, excludeIds) {
     excludeIds = excludeIds || [];
-    var all = await fetchPRRoleMemberIds(client);
+    var res = await fetchPRRoleMemberIds(client);
+    if (!res.ok) return { ok: false, ids: [], reason: res.reason };
+    var all = res.ids;
     var active = [];
     for (var i = 0; i < all.length; i++) {
         if (excludeIds.indexOf(all[i]) !== -1) continue;
         if (await isOnApprovedLeave(all[i], date)) continue;
         active.push(all[i]);
     }
-    return active;
+    return { ok: true, ids: active, reason: '' };
 }
 
 async function getAllPRMemberIds(client) {
@@ -250,7 +291,14 @@ async function getOrCreateWeeklyRotation(client, nowDate) {
     var existing = await WeeklyRotation.findOne({ weekStartDate: weekStart });
     if (existing) return existing;
 
-    var members = await getAllPRMemberIds(client);
+    var res = await getAllPRMemberIds(client);
+    if (!res.ok) {
+        // Do NOT create a rotation from an unreliable member list — that is what caused
+        // the schedule to collapse onto one person. Skip; the next tick will retry.
+        console.error('[PR] Not creating rotation for ' + weekStart + ': ' + res.reason);
+        return null;
+    }
+    var members = res.ids;
     if (members.length === 0) return null;
 
     var priorCounts = await getPriorWeekCounts(weekStart);
@@ -267,7 +315,13 @@ async function getOrCreateWeeklyRotation(client, nowDate) {
 // Regenerate the rotation for a given week, only touching days that DON'T already have a PRAssignment.
 // Returns a summary object describing what was kept vs. changed.
 async function regenerateWeek(client, weekStartString) {
-    var members = await getAllPRMemberIds(client);
+    var res = await getAllPRMemberIds(client);
+    if (!res.ok) {
+        // Refuse to regenerate from a partial member list — return the reason so the
+        // command shows it to the user rather than silently writing a one-person week.
+        return { ok: false, error: res.reason };
+    }
+    var members = res.ids;
     if (members.length === 0) {
         return { ok: false, error: 'No PR members in role' };
     }
@@ -497,7 +551,13 @@ async function runDailyAssignment(client) {
     }
 
     if (!assigneeId) {
-        var subs = await getActivePRMemberIds(client, now, []);
+        var subRes = await getActivePRMemberIds(client, now, []);
+        if (!subRes.ok) {
+            // Unreliable member list — do not assign (would default to the cached owner).
+            console.error('[PR] Skipping ' + today + ' — ' + subRes.reason);
+            return;
+        }
+        var subs = subRes.ids;
         if (subs.length === 0) {
             console.log('[PR] No available PR members (all on leave or none in server). Skipping', today);
             await PRAssignment.create({
@@ -557,7 +617,8 @@ async function advanceAfterRejection(client, assignment) {
     // Pick next un-asked, available member, weighted toward those with the fewest assignments this week
     var now = new Date();
     var exclude = assignment.rejectedIds.concat([]);
-    var available = await getActivePRMemberIds(client, now, exclude);
+    var availRes = await getActivePRMemberIds(client, now, exclude);
+    var available = availRes.ok ? availRes.ids : [];
 
     if (available.length > 0) {
         var weekStart = centralWeekStartString(now);
