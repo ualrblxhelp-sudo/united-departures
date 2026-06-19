@@ -202,7 +202,13 @@ module.exports = {
                 var aircraftImages = { '737-800 NEXT': '737-800.png' };
                 var imageFile = aircraftImages[flight.aircraft];
                 if (imageFile) {
-                    try { eventOptions.image = fs.readFileSync(path.join(__dirname, '..', imageFile)); } catch (imgErr) {}
+                    // The image lives at the project root, two levels up from commands/_handlers/.
+                    var imagePath = path.join(__dirname, '..', '..', imageFile);
+                    try {
+                        eventOptions.image = fs.readFileSync(imagePath);
+                    } catch (imgErr) {
+                        console.error('[Create] Could not read event banner at ' + imagePath + ':', imgErr.message);
+                    }
                 }
                 var event = await eventGuild.scheduledEvents.create(eventOptions);
                 flight.discordEventId = event.id;
