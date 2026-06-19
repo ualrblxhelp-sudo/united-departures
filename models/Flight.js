@@ -25,6 +25,7 @@ const flightSchema = new mongoose.Schema({
     forumThreadId: { type: String },       // Forum thread ID in staff server
     forumMessageId: { type: String },      // The allocation embed message ID
     calendarMessageId: { type: String },   // Persistent calendar message (shared)
+    discordEventId: { type: String },      // Discord scheduled event ID (used by end/edit/delete)
 
     // Status
     flightType: { type: String, default: 'regular', enum: ['regular', 'premium', 'test'] },
