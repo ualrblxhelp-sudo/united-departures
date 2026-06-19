@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const engagement = require('./utils/engagement');
+const newsroom = require('./utils/newsroom');
 const applications = require('./routes/applications');
 const expressApp = express();
 expressApp.use(express.json());
@@ -233,6 +234,13 @@ client.once(Events.ClientReady, async function(c) {
         points.startCleanupScheduler(client);
     } catch (err) {
         console.error('[Points] Cleanup scheduler start error:', err);
+    }
+
+    // Start the United newsroom watcher (polls press releases, posts summaries to #hemispheres)
+    try {
+        newsroom.startNewsroomWatcher(client);
+    } catch (err) {
+        console.error('[Newsroom] Watcher start error:', err);
     }
 });
 
