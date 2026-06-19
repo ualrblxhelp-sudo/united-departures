@@ -6,6 +6,7 @@ var Flight = require('../../models/Flight');
 var { getAircraftChoices, AIRCRAFT } = require('../../config/aircraft');
 var { buildFlightInfoEmbed, buildAllocationEmbed } = require('../../utils/embed');
 var { updateAllCalendars } = require('../../utils/calendar');
+var { postFlightAnnouncement } = require('../../utils/announce');
 var ids = require('../../config/ids');
 
 function parseTimestamp(input) {
@@ -176,6 +177,7 @@ module.exports = {
     
         // Create Discord scheduled event
         // Regular + Premium -> main server, Test -> staff server only
+        var announcementEventLink = null;
         try {
             if (p.flightType === 'premium') throw 'skip';
             var eventServerId = (p.flightType === 'test') ? ids.STAFF_SERVER_ID : ids.CALENDAR_SERVER_ID;
@@ -205,8 +207,21 @@ module.exports = {
                 var event = await eventGuild.scheduledEvents.create(eventOptions);
                 flight.discordEventId = event.id;
                 await flight.save();
+
+                // Only regular flights post a public event in the main (calendar) server,
+                // so only those get the public announcement with a working event link.
+                if (eventServerId === ids.CALENDAR_SERVER_ID) {
+                    announcementEventLink = 'https://discord.com/events/' + ids.CALENDAR_SERVER_ID + '/' + event.id;
+                }
             }
         } catch (err) { console.error('[Create] Event error:', err); }
+
+        // Public flight announcement -> main server announcement channel (+ ghost ping + reaction)
+        if (announcementEventLink) {
+            try { await postFlightAnnouncement(interaction.client, flight, announcementEventLink); }
+            catch (err) { console.error('[Create] Announcement error:', err); }
+        }
+
 
         pendingCreations.delete(interaction.user.id);
         await interaction.editReply({
