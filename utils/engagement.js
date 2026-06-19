@@ -467,6 +467,49 @@ function buildForceAssignEmbed(userId, theme) {
         .setDescription(desc);
 }
 
+// Format/template embed shown after a member accepts, so they know exactly what to post.
+function buildFormatEmbed(theme) {
+    var t = (theme || '').toLowerCase();
+    var label, template;
+
+    if (t.indexOf('song') !== -1) {
+        label = 'Song of the Week';
+        template =
+            '> ### <:e_star:1397829440469336187> United Hemispheres\n' +
+            '-# **Song of the Week** \u2014 Good Leads the Way\n' +
+            '\n' +
+            '> **SONG NAME** by **ARTIST** DESCRIPTION HERE\n' +
+            '<:e_curser:1397829435717193858> [**Listen on Spotify**](SPOTIFY LINK)\n' +
+            '<:e_curser:1397829435717193858> [**Listen on Apple Music**](APPLE MUSIC LINK)\n' +
+            '\n' +
+            '-# _ _';
+    } else if (t.indexOf('fact') !== -1) {
+        label = 'United Friday Fact';
+        template =
+            '> ### <:e_document:1397829552797126696> United Hemispheres\n' +
+            '-# **United Friday Fact** \u2014 Good Leads the Way\n' +
+            '\n' +
+            '<:e_arrow:1406847964655259710> INSERT FACT HERE\n' +
+            'IMAGE BELOW';
+    } else {
+        label = 'Question of the Day';
+        template =
+            '> ### <:e_document:1397829552797126696> United Hemispheres\n' +
+            '-# **Question of the Day** \u2014 Good Leads the Way\n' +
+            'INSERT POLL BELOW';
+    }
+
+    var desc =
+        '> ' + ARROW_MARKUP + 'Copy the format below and post it in <#' + HEMISPHERES_CHANNEL_ID + '>, ' +
+        'replacing the placeholders with your content.\n' +
+        '```\n' + template + '\n```';
+
+    return new EmbedBuilder()
+        .setTitle(MAIL_MARKUP + ' Posting Format \u2014 ' + label)
+        .setColor(EMBED_COLOR)
+        .setDescription(desc);
+}
+
 function buildAcceptRejectRow(assignmentId, disabled) {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -690,7 +733,8 @@ async function handleAccept(interaction) {
     var originalDesc = (interaction.message.embeds[0] && interaction.message.embeds[0].description) || '';
     var updated = EmbedBuilder.from(interaction.message.embeds[0])
         .setDescription(originalDesc + '\n\n' + ACCEPT_MARKUP + ' **Accepted** — complete your post in <#' + HEMISPHERES_CHANNEL_ID + '> by 11:59 PM Central.');
-    await interaction.update({ embeds: [updated], components: [buildAcceptRejectRow(assignmentId, true)] });
+    var formatEmbed = buildFormatEmbed(assignment.theme);
+    await interaction.update({ embeds: [updated, formatEmbed], components: [buildAcceptRejectRow(assignmentId, true)] });
 }
 
 async function handleReject(interaction) {
