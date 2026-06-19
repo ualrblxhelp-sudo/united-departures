@@ -10,4 +10,6 @@ module.exports = {
     EMBED_COLOR: parseInt(process.env.EMBED_COLOR || '0b0fa8', 16),
     STAFF_CALENDAR_CHANNEL_ID: process.env.STAFF_CALENDAR_CHANNEL_ID,
     PREMIUM_CALENDAR_CHANNEL_ID: process.env.PREMIUM_CALENDAR_CHANNEL_ID,
+    // Channel (main server) where public flight announcements are posted.
+    FLIGHT_ANNOUNCE_CHANNEL_ID: process.env.FLIGHT_ANNOUNCE_CHANNEL_ID || '1309648814533115954',
 };
