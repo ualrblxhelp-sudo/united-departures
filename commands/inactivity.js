@@ -3,6 +3,7 @@ const {
     ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle,
 } = require('discord.js');
 const LeaveOfAbsence = require('../models/LeaveOfAbsence');
+const sheet = require('../utils/sheet');
 
 var INACTIVITY_CHANNEL_ID = process.env.INACTIVITY_CHANNEL_ID;
 
@@ -106,10 +107,11 @@ module.exports = {
                     var endDate = new Date(endMs);
                     endDate.setHours(23, 59, 59, 999);
                     var fetchedUser = await interaction.client.users.fetch(userId).catch(function() { return null; });
+                    var robloxUsername = robloxMatch ? robloxMatch[1].trim() : null;
                     await LeaveOfAbsence.create({
                         userId: userId,
                         username: fetchedUser ? fetchedUser.username : null,
-                        robloxUsername: robloxMatch ? robloxMatch[1].trim() : null,
+                        robloxUsername: robloxUsername,
                         startDate: new Date(startMs),
                         endDate: endDate,
                         reason: reasonMatch ? reasonMatch[1].trim() : null,
@@ -117,6 +119,17 @@ module.exports = {
                         approvedByUsername: interaction.user.username,
                         approvedAt: new Date(),
                     });
+
+                    // Add the LOA length (inclusive day count) to Leave of Absence/USED in the sheet.
+                    var dayMs = 24 * 60 * 60 * 1000;
+                    var loaDays = Math.round((endMs - startMs) / dayMs) + 1;
+                    if (loaDays < 1) loaDays = 1;
+                    if (robloxUsername) {
+                        try { await sheet.addLoaUsedDays(robloxUsername, loaDays); }
+                        catch (e) { console.error('[Inactivity] sheet LOA sync error:', e.message); }
+                    } else {
+                        console.error('[Inactivity] No Roblox username parsed — skipping sheet LOA sync.');
+                    }
                 } else {
                     console.error('[Inactivity] Could not parse dates:', startRaw, '/', endRaw);
                 }
