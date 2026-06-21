@@ -8,6 +8,7 @@ const engagement = require('./utils/engagement');
 const newsroom = require('./utils/newsroom');
 const applications = require('./routes/applications');
 const expressApp = express();
+const flightsApi = require('./routes/flights');
 expressApp.use(express.json());
 
 const client = new Client({
@@ -268,6 +269,8 @@ async function start() {
 
     // Setup application route
     applications.setupApplicationRoute(client, expressApp);
+    // Setup read-only flights API (Roblox Flight Hub)
+    flightsApi.setupFlightsRoute(expressApp);
 
     // Health check
     expressApp.get('/', function(req, res) { res.send('Bot is running'); });
