@@ -4,6 +4,7 @@
 // addedAt/expiresAt). Active = removed:false AND expiresAt > now.
 
 const PointRecord = require('../models/PointRecord');
+const sheet = require('./sheet');
 
 const VOLARE_GUILD_ID = '1309560657473179679';
 const POINT_LIFETIME_MS = 60 * 24 * 60 * 60 * 1000; // 60 days
@@ -71,6 +72,11 @@ async function addPoint(client, discordId, opts) {
         await PointRecord.insertMany(docs);
 
         const total = await getActiveCount(discordId);
+
+        // Mirror the new active total to the Employee Database sheet (Sanction Status/CURRENT).
+        try { await sheet.syncSanctionTotal(robloxUsername, total); }
+        catch (e) { console.error('[Points] sheet sync (add) error:', e.message); }
+
         return { ok: true, total: total, robloxUsername: robloxUsername };
     } catch (err) {
         console.error('[Points] addPoint error:', err);
@@ -102,6 +108,11 @@ async function removePoint(client, discordId, opts) {
         );
 
         const total = await getActiveCount(discordId);
+
+        // Mirror the new active total to the Employee Database sheet (Sanction Status/CURRENT).
+        try { await sheet.syncSanctionTotal(active[0].robloxUsername, total); }
+        catch (e) { console.error('[Points] sheet sync (remove) error:', e.message); }
+
         return {
             ok: true,
             removed: active.length,
