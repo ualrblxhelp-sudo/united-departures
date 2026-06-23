@@ -88,14 +88,18 @@ function looksLikeArticleSlug(slug) {
 }
 
 function metaTag(html, name) {
-    // Matches <meta property="og:title" content="..."> or <meta name="description" content="...">
-    var patterns = [
-        new RegExp('<meta[^>]+(?:property|name)=["\']' + name + '["\'][^>]+content=["\']([^"\']*)["\']', 'i'),
-        new RegExp('<meta[^>]+content=["\']([^"\']*)["\'][^>]+(?:property|name)=["\']' + name + '["\']', 'i'),
-    ];
-    for (var i = 0; i < patterns.length; i++) {
-        var m = html.match(patterns[i]);
-        if (m) return decodeEntities(m[1]).trim();
+    // Iterate each <meta> tag and match content by its own quote delimiter, so an
+    // apostrophe inside a double-quoted value (e.g. "the world's largest") doesn't
+    // cut the value short.
+    var target = String(name).toLowerCase();
+    var tagRe = /<meta\b[^>]*>/gi;
+    var tag;
+    while ((tag = tagRe.exec(html)) !== null) {
+        var t = tag[0];
+        var key = t.match(/(?:property|name)\s*=\s*["']([^"']+)["']/i);
+        if (!key || key[1].toLowerCase() !== target) continue;
+        var content = t.match(/content\s*=\s*"([^"]*)"/i) || t.match(/content\s*=\s*'([^']*)'/i);
+        if (content) return decodeEntities(content[1]).trim();
     }
     return '';
 }
@@ -224,8 +228,14 @@ async function buildSummary(article) {
 
 // ---- Post ----
 function buildPostContent(article, summary) {
-    var lines = ['**' + article.title + '**', ''].concat(String(summary).split('\n'));
-    var quoted = lines.map(function(l) { return l.length ? '> ' + l : '>'; }).join('\n');
+    // Title then summary as consecutive blockquote lines — one continuous quote, no blank
+    // separator line (a bare ">" rendered as a stray character and split the quote in two).
+    var summaryLines = String(summary).split('\n')
+        .map(function(l) { return l.trim(); })
+        .filter(function(l) { return l.length; });
+    var quoted = ['**' + article.title + '**'].concat(summaryLines)
+        .map(function(l) { return '> ' + l; })
+        .join('\n');
 
     var content =
         '> ### ' + DOC_MARKUP + ' United Hemispheres\n' +
