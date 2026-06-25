@@ -24,5 +24,7 @@ const suggestionSchema = new mongoose.Schema({
 });
  
 suggestionSchema.index({ tallied: 1, tallyAt: 1 });
+// Fast lookup of a user's most recent submission (used by the 72h rate limiter)
+suggestionSchema.index({ authorId: 1, createdAt: -1 });
  
 module.exports = mongoose.model('DiscordSuggestion', suggestionSchema);
