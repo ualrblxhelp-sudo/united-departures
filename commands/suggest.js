@@ -19,6 +19,7 @@ var CALENDAR_MARKUP = '<:volare_calendar:1408481918177251438>';
 
 var EMBED_COLOR = 0x3A1540;
 var TALLY_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+var COOLDOWN_MS = 72 * 60 * 60 * 1000;  // 72 hours between suggestions per user
 
 function isLikelyImageUrl(url) {
     if (!url) return false;
@@ -38,6 +39,24 @@ function isLikelyImageUrl(url) {
 
 // In-process timer handles for live tallying. Repopulated on startup.
 var scheduledTallies = new Map();
+
+// Returns milliseconds remaining on this user's 72h suggestion cooldown, or 0 if clear.
+// Source of truth is the user's most recent persisted suggestion (no separate record needed).
+async function getCooldownRemaining(authorId) {
+    try {
+        var last = await Suggestion.findOne({ authorId: authorId })
+            .sort({ createdAt: -1 })
+            .select('createdAt')
+            .lean();
+        if (!last || !last.createdAt) return 0;
+        var remaining = COOLDOWN_MS - (Date.now() - new Date(last.createdAt).getTime());
+        return remaining > 0 ? remaining : 0;
+    } catch (err) {
+        // On a lookup failure, fail open (allow the suggestion) rather than locking users out.
+        console.error('[Suggest] Cooldown lookup error:', err);
+        return 0;
+    }
+}
 
 function isValidUrl(str) {
     if (!str) return false;
@@ -209,6 +228,15 @@ module.exports = {
             });
         }
 
+        var cooldown = await getCooldownRemaining(interaction.user.id);
+        if (cooldown > 0) {
+            var readyAt = Math.floor((Date.now() + cooldown) / 1000);
+            return interaction.reply({
+                content: '<:volare_reject:1408484388681027614> You can only submit one suggestion every 72 hours. You can suggest again <t:' + readyAt + ':R>.',
+                ephemeral: true,
+            });
+        }
+
         var modal = new ModalBuilder()
             .setCustomId('suggest_modal')
             .setTitle('Submit a Suggestion');
@@ -267,6 +295,17 @@ module.exports = {
                 });
             }
             mediaUrl = mediaRaw;
+        }
+
+        // Authoritative cooldown check: a suggestion is only "given" once it's created here,
+        // so re-verify in case a stale modal is submitted after the window was already used.
+        var cooldown = await getCooldownRemaining(interaction.user.id);
+        if (cooldown > 0) {
+            var readyAt = Math.floor((Date.now() + cooldown) / 1000);
+            return interaction.reply({
+                content: '<:volare_reject:1408484388681027614> You can only submit one suggestion every 72 hours. You can suggest again <t:' + readyAt + ':R>.',
+                ephemeral: true,
+            });
         }
 
         await interaction.deferReply({ ephemeral: true });
