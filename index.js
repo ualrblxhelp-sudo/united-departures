@@ -70,6 +70,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (id === 'end_flight') {
                 return await client.commands.get('flight').end_handleFlightSelect(interaction);
             }
+            if (id === 'recover_flight') {
+                return await client.commands.get('flight').recover_handleFlightSelect(interaction);
+            }
             if (id === 'bugreport_type') {
                 return await client.commands.get('bugreport').handleTypeSelect(interaction);
             }
@@ -121,6 +124,12 @@ client.on(Events.InteractionCreate, async function(interaction) {
             }
             if (bid === 'end_cancel') {
                 return await client.commands.get('flight').end_handleCancel(interaction);
+            }
+            if (bid === 'recover_confirm') {
+                return await client.commands.get('flight').recover_handleConfirm(interaction);
+            }
+            if (bid === 'recover_cancel') {
+                return await client.commands.get('flight').recover_handleCancel(interaction);
             }
             if (bid === 'edit_replace_yes') {
                 return await client.commands.get('flight').edit_handleReplaceYes(interaction);
@@ -211,6 +220,18 @@ client.once(Events.ClientReady, async function(c) {
     calendar.updateAllCalendars(client).catch(function(err) {
         console.error('Calendar update error:', err);
     });
+
+    // Self-heal deleted flight allocation posts (mirrors calendar self-healing).
+    // Only recreates threads that are definitively gone (404); transient
+    // startup fetch failures are left alone and retried on the next boot.
+    try {
+        var forumRecovery = require('./utils/forumRecovery');
+        forumRecovery.selfHealForumThreads(client).catch(function(err) {
+            console.error('[ForumRecovery] Self-heal error:', err);
+        });
+    } catch (err) {
+        console.error('[ForumRecovery] Self-heal start error:', err);
+    }
 
     // Reschedule any un-tallied suggestions that were pending at shutdown
     try {
