@@ -7,6 +7,7 @@ const endHandler = require('./_handlers/_end');
 const deleteHandler = require('./_handlers/_delete');
 const allocateHandler = require('./_handlers/_allocate');
 const unallocateHandler = require('./_handlers/_unallocate');
+const recoverHandler = require('./_handlers/_recover');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -29,6 +30,9 @@ module.exports = {
         })
         .addSubcommand(function(sc) {
             return sc.setName('unallocate').setDescription('Remove yourself from a flight allocation');
+        })
+        .addSubcommand(function(sc) {
+            return sc.setName('recover').setDescription('Recreate a deleted flight allocation post from stored data');
         }),
 
     async execute(interaction) {
@@ -39,6 +43,7 @@ module.exports = {
         if (sub === 'delete') return deleteHandler.execute(interaction);
         if (sub === 'allocate') return allocateHandler.execute(interaction);
         if (sub === 'unallocate') return unallocateHandler.execute(interaction);
+        if (sub === 'recover') return recoverHandler.execute(interaction);
     },
 
     // Re-export all button/modal/select handlers so index.js can dispatch them
@@ -71,4 +76,8 @@ module.exports = {
     delete_handleFlightSelect: deleteHandler.handleFlightSelect,
     delete_handleConfirm: deleteHandler.handleConfirm,
     delete_handleCancel: deleteHandler.handleCancel,
+
+    recover_handleFlightSelect: recoverHandler.handleFlightSelect,
+    recover_handleConfirm: recoverHandler.handleConfirm,
+    recover_handleCancel: recoverHandler.handleCancel,
 };
