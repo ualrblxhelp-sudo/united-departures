@@ -9,6 +9,7 @@ const newsroom = require('./utils/newsroom');
 const applications = require('./routes/applications');
 const expressApp = express();
 const flightsApi = require('./routes/flights');
+const airportsApi = require('./routes/airports');
 expressApp.use(express.json());
 
 const client = new Client({
@@ -292,6 +293,8 @@ async function start() {
     applications.setupApplicationRoute(client, expressApp);
     // Setup read-only flights API (Roblox Flight Hub)
     flightsApi.setupFlightsRoute(expressApp);
+    // Setup live airport player-count API (Roblox Flight Hub)
+    airportsApi.setupAirportsRoute(expressApp);
 
     // Health check
     expressApp.get('/', function(req, res) { res.send('Bot is running'); });
