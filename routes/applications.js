@@ -27,7 +27,7 @@ var ACCEPT_WELCOME_TEXT = `<:e_mail:1397829550716616715> **Welcome to the World 
 var ACCEPT_INVITE_TEXT = `<:e_mail:1397829550716616715> **An Invite to Greatness.**
 > <:e_arrow:1406847964655259710>You will now be invited to our esteemed **Aviate** server below. You must join the server, follow all the requirements listed, and begin your training process from there. 
 > 
-> <:e_curser:1397829435717193858> [United Aviate](https://discord.gg/muePg4Tqb4)
+> <:e_curser:1397829435717193858> [United Aviate](https://discord.gg/fuUhfU2Dvb)
 -# <:UnitedPolaris:1298320157424488479> ɢᴏᴏᴅ ʟᴇᴀᴅꜱ ᴛʜᴇ ᴡᴀʏ
 -# <:d_staralliance:1397830727919337493> ᴀ ꜱᴛᴀʀ ᴀʟʟɪᴀɴᴄᴇ ᴍᴇᴍʙᴇʀ`;
 
