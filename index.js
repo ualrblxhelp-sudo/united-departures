@@ -10,6 +10,8 @@ const applications = require('./routes/applications');
 const expressApp = express();
 const flightsApi = require('./routes/flights');
 const airportsApi = require('./routes/airports');
+const milesApi = require('./routes/miles');
+const milesReset = require('./utils/milesReset');
 expressApp.use(express.json());
 
 const client = new Client({
@@ -295,6 +297,10 @@ async function start() {
     flightsApi.setupFlightsRoute(expressApp);
     // Setup live airport player-count API (Roblox Flight Hub)
     airportsApi.setupAirportsRoute(expressApp);
+    // Setup MileagePlus miles-engine API (Roblox surfaces + Discord /miles)
+    milesApi.setupMilesRoute(expressApp);
+    // Start the annual (Jan 31) qualifying-reset scheduler
+    milesReset.startMilesReset();
 
     // Health check
     expressApp.get('/', function(req, res) { res.send('Bot is running'); });
