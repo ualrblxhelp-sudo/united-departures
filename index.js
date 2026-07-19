@@ -204,7 +204,7 @@ client.once(Events.ClientReady, async function(c) {
         }
 
         // Register only public commands to main United server
-        var publicCommands = ['bugreport'];
+        var publicCommands = ['bugreport', 'miles'];
         var publicCmds = [];
         client.commands.forEach(function(cmd) {
             if (publicCommands.indexOf(cmd.data.name) !== -1) {
