@@ -60,7 +60,7 @@ module.exports = {
 
         if (state === 'live') {
             return interaction.update({
-                content: '\u2139\uFE0F The allocation post for **' + flight.flightNumber + '** still exists in <#' + ids.FORUM_CHANNEL_ID + '> \u2014 nothing to recover. (If you want a fresh one, delete the current post first, then run `/flight recover` again.)',
+                content: '\u2139\uFE0F The allocation post for **' + flight.flightNumber + '** still exists in <#' + ids.STAFF_CALENDAR_CHANNEL_ID + '> \u2014 nothing to recover. (If you want a fresh one, delete the current post first, then run `/flight recover` again.)',
                 components: [],
             });
         }
@@ -86,7 +86,7 @@ module.exports = {
         );
 
         await interaction.update({
-            content: '\u2705 The allocation post for **' + flight.flightNumber + '** (' + flight.departure + ' \u27A1 ' + flight.destination + ') is gone. I\u2019ll recreate it from stored data with its **' + flight.allocations.length + '** current allocation(s).\n\n\u26A0\uFE0F This posts a new thread in <#' + ids.FORUM_CHANNEL_ID + '> and pings **@everyone**. Any chat messages from the old thread can\u2019t be restored.',
+            content: '\u2705 The allocation post for **' + flight.flightNumber + '** (' + flight.departure + ' \u27A1 ' + flight.destination + ') is gone. I\u2019ll recreate it from stored data with its **' + flight.allocations.length + '** current allocation(s).\n\n\u26A0\uFE0F This posts a new thread in <#' + ids.STAFF_CALENDAR_CHANNEL_ID + '> and pings **@everyone**. Any chat messages from the old thread can\u2019t be restored.',
             components: [row],
         });
     },
