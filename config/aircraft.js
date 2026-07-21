@@ -26,6 +26,8 @@ const AIRCRAFT = {
 };
 
 const FIXED_POSITIONS = {
+    'Co-Dispatcher': { department: 'Flight Leadership', max: 1 },
+    'Airport Supervisor': { department: 'Flight Leadership', max: 1 },
     'Customer Service Supervisor': { department: 'Customer Service', max: 1 },
     'Gate Agent': { department: 'Customer Service', max: 2 },
     'Lounge Attendant': { department: 'Customer Service', max: 2 },
@@ -38,7 +40,7 @@ const FIXED_POSITIONS = {
     'First Officer': { department: 'Flight Operations', max: 1 },
 };
 
-const DEPARTMENTS = ['Customer Service', 'Ramp Service Agents', 'Flight Operations'];
+const DEPARTMENTS = ['Flight Leadership', 'Customer Service', 'Ramp Service Agents', 'Flight Operations'];
 
 function getPositionsForAircraft(aircraftKey) {
     var aircraft = AIRCRAFT[aircraftKey];
