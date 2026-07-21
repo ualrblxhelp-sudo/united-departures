@@ -1,6 +1,12 @@
 const { EmbedBuilder } = require('discord.js');
 var Flight = require('../models/Flight');
+var { buildFlightInfoEmbed, buildAllocationEmbed } = require('./embed');
 var ids = require('../config/ids');
+
+// Allocation threads live off the Volare calendar message. 7 days (10080 min)
+// is the max auto-archive; editing the sheet on allocate/unallocate keeps it
+// active, and recovery/self-heal can recreate it if it ever archives away.
+var ALLOC_THREAD_AUTOARCHIVE = 10080;
 
 var calendarMessageRef = null;
 var staffCalendarRef = null;
@@ -146,6 +152,65 @@ async function updateAllCalendars(client) {
     await updatePremiumCalendar(client);
 }
 
+// Thread name format: "Flight Number - Route - Aircraft" (Discord caps at 100).
+function buildAllocationThreadName(flight) {
+    var route = flight.departure + '-' + flight.destination;
+    var name = flight.flightNumber + ' - ' + route + ' - ' + flight.aircraft;
+    return name.length > 100 ? name.slice(0, 100) : name;
+}
+
+// Resolve the Volare (staff) calendar channel, tolerating a cold cache.
+async function getStaffCalendarChannel(client) {
+    var guild = client.guilds.cache.get(ids.STAFF_SERVER_ID);
+    if (!guild) return null;
+    var channel = guild.channels.cache.get(ids.STAFF_CALENDAR_CHANNEL_ID);
+    if (!channel) channel = await guild.channels.fetch(ids.STAFF_CALENDAR_CHANNEL_ID).catch(function() { return null; });
+    return channel || null;
+}
+
+// Post a FRESH Volare calendar message and return it. Discord allows only one
+// thread per message, so each flight gets its own reposted calendar message to
+// spawn its allocation thread from. The newest repost becomes the live calendar
+// (so /update edits it in place thereafter).
+async function postStaffCalendarMessage(client) {
+    var channel = await getStaffCalendarChannel(client);
+    if (!channel) return null;
+    var flights = await Flight.find({ status: 'scheduled' }).sort({ serverOpenTime: 1 });
+    var embed = new EmbedBuilder()
+        .setTitle('<:e_plane:1397829563249328138> Scheduled Departures')
+        .setColor(ids.EMBED_COLOR)
+        .setDescription(buildCalendarDescription(flights))
+        .setTimestamp()
+        .setFooter({ text: 'United Airlines \u2022 Auto-updated' });
+    var msg = await channel.send({ embeds: [embed] });
+    staffCalendarRef = msg;
+    return msg;
+}
+
+// Create the allocation sheet as a THREAD hanging off a freshly-posted Volare
+// calendar message. Returns { thread, starter } or null. Reused by /create,
+// /flight recover, and startup self-heal so every path is identical.
+async function postAllocationThread(client, flight, options) {
+    options = options || {};
+    var ping = options.ping !== false; // default: ping @everyone in the thread
+    var calMsg = await postStaffCalendarMessage(client);
+    if (!calMsg) return null;
+
+    var infoEmbed = buildFlightInfoEmbed(flight);
+    var allocEmbed = buildAllocationEmbed(flight);
+    if (options.color) { infoEmbed.setColor(options.color); allocEmbed.setColor(options.color); }
+
+    var thread = await calMsg.startThread({
+        name: buildAllocationThreadName(flight),
+        autoArchiveDuration: ALLOC_THREAD_AUTOARCHIVE,
+    });
+    var starter = await thread.send({
+        content: ping ? '@everyone' : '\u200b',
+        embeds: [infoEmbed, allocEmbed],
+    });
+    return { thread: thread, starter: starter };
+}
+
 async function announceNewFlight(client, flight) {
     try {
         var guild = client.guilds.cache.get(ids.STAFF_SERVER_ID);
@@ -155,8 +220,13 @@ async function announceNewFlight(client, flight) {
         var prefix = '';
         if (flight.flightType === 'test') prefix = '**test** ';
         if (flight.flightType === 'premium') prefix = '**premium** ';
-        await channel.send('@everyone A ' + prefix + 'flight has been scheduled. You may allocate accordingly in the <#' + ids.FORUM_CHANNEL_ID + '> forum.');
+        await channel.send('@everyone A ' + prefix + 'flight has been scheduled. Allocate in the flight\'s allocation thread on the calendar above.');
     } catch (err) { console.error('[Announce] Error:', err); }
 }
 
-module.exports = { updateCalendar, updateStaffCalendar, updatePremiumCalendar, updateAllCalendars, announceNewFlight };
+module.exports = {
+    updateCalendar, updateStaffCalendar, updatePremiumCalendar, updateAllCalendars,
+    announceNewFlight,
+    getStaffCalendarChannel, postStaffCalendarMessage, postAllocationThread,
+    buildAllocationThreadName,
+};
