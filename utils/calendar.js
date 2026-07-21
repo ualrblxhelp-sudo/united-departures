@@ -187,23 +187,52 @@ async function postStaffCalendarMessage(client) {
     return msg;
 }
 
-// Create the allocation sheet as a THREAD hanging off a freshly-posted Volare
-// calendar message. Returns { thread, starter } or null. Reused by /create,
-// /flight recover, and startup self-heal so every path is identical.
+// Find the current Volare calendar message (the persistent "Scheduled
+// Departures" post) without editing it. Returns the Message or null.
+async function findStaffCalendarMessage(client, channel) {
+    if (staffCalendarRef) {
+        var byRef = await channel.messages.fetch(staffCalendarRef.id).catch(function() { return null; });
+        if (byRef) return byRef;
+    }
+    var recent = await channel.messages.fetch({ limit: 20 }).catch(function() { return null; });
+    if (!recent) return null;
+    return recent.find(function(m) {
+        return m.author.id === client.user.id && m.embeds.length > 0 &&
+            m.embeds[0].title && m.embeds[0].title.includes('Scheduled Departures');
+    }) || null;
+}
+
+// Create the allocation sheet as a THREAD hanging off the Volare calendar
+// message. Prefers the existing calendar post if it has no thread yet (Discord
+// allows one thread per message); otherwise reposts a fresh calendar message to
+// hang this flight's thread from. Returns { thread, starter } or null. Reused by
+// /create, /flight recover, and startup self-heal so every path is identical.
 async function postAllocationThread(client, flight, options) {
     options = options || {};
     var ping = options.ping !== false; // default: ping @everyone in the thread
-    var calMsg = await postStaffCalendarMessage(client);
+
+    var channel = await getStaffCalendarChannel(client);
+    if (!channel) return null;
+
+    var calMsg = await findStaffCalendarMessage(client, channel);
+    if (!calMsg || calMsg.hasThread) calMsg = await postStaffCalendarMessage(client);
     if (!calMsg) return null;
 
     var infoEmbed = buildFlightInfoEmbed(flight);
     var allocEmbed = buildAllocationEmbed(flight);
     if (options.color) { infoEmbed.setColor(options.color); allocEmbed.setColor(options.color); }
 
-    var thread = await calMsg.startThread({
-        name: buildAllocationThreadName(flight),
-        autoArchiveDuration: ALLOC_THREAD_AUTOARCHIVE,
-    });
+    var threadName = buildAllocationThreadName(flight);
+    var thread;
+    try {
+        thread = await calMsg.startThread({ name: threadName, autoArchiveDuration: ALLOC_THREAD_AUTOARCHIVE });
+    } catch (e) {
+        // The chosen message already has a thread (or can't host one) — repost a
+        // fresh calendar message and thread off that instead.
+        var fresh = await postStaffCalendarMessage(client);
+        if (!fresh) throw e;
+        thread = await fresh.startThread({ name: threadName, autoArchiveDuration: ALLOC_THREAD_AUTOARCHIVE });
+    }
     var starter = await thread.send({
         content: ping ? '@everyone' : '\u200b',
         embeds: [infoEmbed, allocEmbed],
