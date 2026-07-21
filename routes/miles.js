@@ -120,10 +120,34 @@ function setupMilesRoute(app) {
             if (!who) return res.status(404).json({ ok: false, error: 'Roblox user not found' });
             var booking = await sb.rpc('book_passenger', {
                 p_flight_id: b.flightId, p_user_id: who.userId, p_username: who.username,
-                p_cabin: b.cabin, p_via: b.bookedVia || 'checkin',
+                p_cabin: b.cabin, p_via: b.bookedVia || 'checkin', p_seat: b.seat || null,
             });
             return res.json({ ok: true, booking: booking });
         } catch (err) { return fail(res, err, 'checkin'); }
+    });
+
+    // ---- WRITE: void an unpaid booking (player left before payout) ----------
+    app.post('/api/miles/unbook', async function (req, res) {
+        if (!keyOk(req, res)) return; if (!sbOk(res)) return;
+        var b = req.body || {};
+        if (!b.flightId || b.userId == null) return res.status(400).json({ ok: false, error: 'flightId and userId required' });
+        try {
+            var result = await sb.rpc('void_booking', { p_flight_id: b.flightId, p_user_id: Number(b.userId) });
+            return res.json({ ok: true, result: result });
+        } catch (err) { return fail(res, err, 'unbook'); }
+    });
+
+    // ---- WRITE: mark a passenger boarded (phone bookings earn only once boarded) ----
+    app.post('/api/miles/board', async function (req, res) {
+        if (!keyOk(req, res)) return; if (!sbOk(res)) return;
+        var b = req.body || {};
+        if (!b.flightId) return res.status(400).json({ ok: false, error: 'flightId required' });
+        try {
+            var who = await resolveUser(b);
+            if (!who) return res.status(404).json({ ok: false, error: 'Roblox user not found' });
+            var result = await sb.rpc('mark_boarded', { p_flight_id: b.flightId, p_user_id: who.userId });
+            return res.json({ ok: true, result: result });
+        } catch (err) { return fail(res, err, 'board'); }
     });
 
     // ---- WRITE: pay out a flight (staff MileagePlus Payout) -----------------
