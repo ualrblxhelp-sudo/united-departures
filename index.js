@@ -193,28 +193,51 @@ client.once(Events.ClientReady, async function(c) {
 
     try {
         var rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
+
+        // Miles commands are registered GLOBALLY so they work in every server the
+        // bot is in (and in DMs). Anything listed here MUST be excluded from the
+        // guild registrations below, or it will show up twice in that guild.
+        var globalCommands = ['mymiles', 'addmiles', 'removemiles', 'rankupmiles'];
+
+        // --- Volare staff server: every command EXCEPT the global ones ---
         var cmds = [];
         client.commands.forEach(function(cmd) {
-            cmds.push(cmd.data.toJSON());
+            if (globalCommands.indexOf(cmd.data.name) === -1) {
+                cmds.push(cmd.data.toJSON());
+            }
         });
-        // Register all commands to Volare staff server
         if (process.env.STAFF_SERVER_ID) {
             await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.STAFF_SERVER_ID), { body: cmds });
-            console.log('All commands registered to staff server');
+            console.log('Staff commands registered to Volare (' + cmds.length + ')');
         }
 
-        // Register only public commands to main United server
-        var publicCommands = ['bugreport', 'miles'];
+        // --- Main United server: only its public commands (globals excluded) ---
+        var publicCommands = ['bugreport'];
         var publicCmds = [];
         client.commands.forEach(function(cmd) {
-            if (publicCommands.indexOf(cmd.data.name) !== -1) {
+            if (publicCommands.indexOf(cmd.data.name) !== -1 && globalCommands.indexOf(cmd.data.name) === -1) {
                 publicCmds.push(cmd.data.toJSON());
             }
         });
         if (process.env.CALENDAR_SERVER_ID) {
             await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.CALENDAR_SERVER_ID), { body: publicCmds });
-            console.log('Public commands registered to main server');
+            console.log('Public commands registered to main server (' + publicCmds.length + ')');
         }
+
+        // --- GLOBAL: miles commands, available in every server + DMs ---
+        // NOTE: first-time global registration can take up to ~1h to propagate
+        // (Discord caches globals); guild commands are instant by comparison.
+        // Command files and their rank gating are unchanged, so /addmiles,
+        // /removemiles, /rankupmiles still verify the executor's rank in the main
+        // United server no matter where they're run — they stay secure everywhere.
+        var globalCmds = [];
+        client.commands.forEach(function(cmd) {
+            if (globalCommands.indexOf(cmd.data.name) !== -1) {
+                globalCmds.push(cmd.data.toJSON());
+            }
+        });
+        await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: globalCmds });
+        console.log('Miles commands registered globally (' + globalCmds.length + ')');
     } catch (err) {
         console.error('Command registration error:', err);
     }
