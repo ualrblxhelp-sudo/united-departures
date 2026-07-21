@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 var Flight = require('../models/Flight');
-var { buildFlightInfoEmbed, buildAllocationEmbed } = require('./embed');
+var { buildFlightInfoEmbed, buildAllocationEmbed, buildFlightCardEmbed } = require('./embed');
 var ids = require('../config/ids');
 
 // Allocation threads live off the Volare calendar message. 7 days (10080 min)
@@ -64,11 +64,27 @@ async function findOrCreateBotMessage(client, channel, ref, title) {
     if (ref) {
         try { await ref.edit({ content: '' }); return ref; } catch (e) {}
     }
+    // Pinned first: per-flight cards can push the calendar past the recent-20
+    // window, so on a cold start we look at pins (the calendar is pinned) before
+    // scanning recent messages. This keeps exactly one permanent calendar.
+    var pinned = await channel.messages.fetchPinned().catch(function() { return null; });
+    if (pinned) {
+        var pin = pinned.find(function(m) {
+            return m.author.id === client.user.id && m.embeds.length > 0 && m.embeds[0].title && m.embeds[0].title.includes(title);
+        });
+        if (pin) return pin;
+    }
     var recent = await channel.messages.fetch({ limit: 20 });
     var found = recent.find(function(m) {
         return m.author.id === client.user.id && m.embeds.length > 0 && m.embeds[0].title && m.embeds[0].title.includes(title);
     });
     return found || null;
+}
+
+// Pin a freshly-created calendar message so it stays findable regardless of how
+// many flight cards accumulate beneath it. Best-effort — ignores permission errors.
+async function pinCalendarMessage(msg) {
+    try { await msg.pin(); } catch (e) { /* missing Manage Messages — non-fatal */ }
 }
 
 // Main server calendar - REGULAR ONLY
@@ -117,6 +133,7 @@ async function updateStaffCalendar(client) {
             await staffCalendarRef.edit({ embeds: [embed] });
         } else {
             staffCalendarRef = await channel.send({ embeds: [embed] });
+            await pinCalendarMessage(staffCalendarRef);
         }
     } catch (err) { console.error('[StaffCalendar] Error:', err); }
 }
@@ -168,45 +185,11 @@ async function getStaffCalendarChannel(client) {
     return channel || null;
 }
 
-// Post a FRESH Volare calendar message and return it. Discord allows only one
-// thread per message, so each flight gets its own reposted calendar message to
-// spawn its allocation thread from. The newest repost becomes the live calendar
-// (so /update edits it in place thereafter).
-async function postStaffCalendarMessage(client) {
-    var channel = await getStaffCalendarChannel(client);
-    if (!channel) return null;
-    var flights = await Flight.find({ status: 'scheduled' }).sort({ serverOpenTime: 1 });
-    var embed = new EmbedBuilder()
-        .setTitle('<:e_plane:1397829563249328138> Scheduled Departures')
-        .setColor(ids.EMBED_COLOR)
-        .setDescription(buildCalendarDescription(flights))
-        .setTimestamp()
-        .setFooter({ text: 'United Airlines \u2022 Auto-updated' });
-    var msg = await channel.send({ embeds: [embed] });
-    staffCalendarRef = msg;
-    return msg;
-}
-
-// Find the current Volare calendar message (the persistent "Scheduled
-// Departures" post) without editing it. Returns the Message or null.
-async function findStaffCalendarMessage(client, channel) {
-    if (staffCalendarRef) {
-        var byRef = await channel.messages.fetch(staffCalendarRef.id).catch(function() { return null; });
-        if (byRef) return byRef;
-    }
-    var recent = await channel.messages.fetch({ limit: 20 }).catch(function() { return null; });
-    if (!recent) return null;
-    return recent.find(function(m) {
-        return m.author.id === client.user.id && m.embeds.length > 0 &&
-            m.embeds[0].title && m.embeds[0].title.includes('Scheduled Departures');
-    }) || null;
-}
-
-// Create the allocation sheet as a THREAD hanging off the Volare calendar
-// message. Prefers the existing calendar post if it has no thread yet (Discord
-// allows one thread per message); otherwise reposts a fresh calendar message to
-// hang this flight's thread from. Returns { thread, starter } or null. Reused by
-// /create, /flight recover, and startup self-heal so every path is identical.
+// Create the allocation sheet as a THREAD hanging off a per-flight CARD embed
+// (see buildFlightCardEmbed). This replaces reposting the calendar per flight:
+// one permanent "Scheduled Departures" calendar stays put, and each flight gets
+// its own card + linked thread. Returns { thread, starter, cardMessage } or null.
+// Reused by /create, /flight recover, and startup self-heal so paths are identical.
 async function postAllocationThread(client, flight, options) {
     options = options || {};
     var ping = options.ping !== false; // default: ping @everyone in the thread
@@ -214,30 +197,24 @@ async function postAllocationThread(client, flight, options) {
     var channel = await getStaffCalendarChannel(client);
     if (!channel) return null;
 
-    var calMsg = await findStaffCalendarMessage(client, channel);
-    if (!calMsg || calMsg.hasThread) calMsg = await postStaffCalendarMessage(client);
-    if (!calMsg) return null;
+    // Post the flight card, then hang the allocation thread off it. A thread
+    // started from a message shares that message's id, and its parent is this
+    // channel (STAFF_CALENDAR_CHANNEL_ID) — which inspectThread validates.
+    var cardMsg = await channel.send({ embeds: [buildFlightCardEmbed(flight)] });
 
     var infoEmbed = buildFlightInfoEmbed(flight);
     var allocEmbed = buildAllocationEmbed(flight);
     if (options.color) { infoEmbed.setColor(options.color); allocEmbed.setColor(options.color); }
 
-    var threadName = buildAllocationThreadName(flight);
-    var thread;
-    try {
-        thread = await calMsg.startThread({ name: threadName, autoArchiveDuration: ALLOC_THREAD_AUTOARCHIVE });
-    } catch (e) {
-        // The chosen message already has a thread (or can't host one) — repost a
-        // fresh calendar message and thread off that instead.
-        var fresh = await postStaffCalendarMessage(client);
-        if (!fresh) throw e;
-        thread = await fresh.startThread({ name: threadName, autoArchiveDuration: ALLOC_THREAD_AUTOARCHIVE });
-    }
+    var thread = await cardMsg.startThread({
+        name: buildAllocationThreadName(flight),
+        autoArchiveDuration: ALLOC_THREAD_AUTOARCHIVE,
+    });
     var starter = await thread.send({
         content: ping ? '@everyone' : '\u200b',
         embeds: [infoEmbed, allocEmbed],
     });
-    return { thread: thread, starter: starter };
+    return { thread: thread, starter: starter, cardMessage: cardMsg };
 }
 
 async function announceNewFlight(client, flight) {
@@ -256,6 +233,6 @@ async function announceNewFlight(client, flight) {
 module.exports = {
     updateCalendar, updateStaffCalendar, updatePremiumCalendar, updateAllCalendars,
     announceNewFlight,
-    getStaffCalendarChannel, postStaffCalendarMessage, postAllocationThread,
+    getStaffCalendarChannel, postAllocationThread,
     buildAllocationThreadName,
 };
