@@ -1,6 +1,7 @@
 // utils/embed.js
 const { EmbedBuilder } = require('discord.js');
 const { getPositionsForAircraft, DEPARTMENTS } = require('../config/aircraft');
+const { airportLabel } = require('../config/airports');
 const ids = require('../config/ids');
 
 /**
@@ -108,4 +109,28 @@ function buildArchiveEmbed(flight) {
     return { archiveEmbed, allocationEmbed };
 }
 
-module.exports = { buildFlightInfoEmbed, buildAllocationEmbed, buildArchiveEmbed };
+/**
+ * Build the per-flight "card" embed that the allocation thread hangs off.
+ * This replaces reposting the calendar per flight — one permanent calendar
+ * stays put, and each flight gets this card + its own linked thread.
+ */
+function buildFlightCardEmbed(flight) {
+    // "United Airlines 1812" — the numeric portion of the flight number.
+    var digits = String(flight.flightNumber).replace(/[^0-9]/g, '');
+    var numberLabel = digits || String(flight.flightNumber);
+
+    var bullets =
+        '\u2022 United Airlines **' + numberLabel + '**\n' +
+        '\u2022 ' + airportLabel(flight.departure) + ' -> ' + airportLabel(flight.destination) + '\n' +
+        '\u2022 <t:' + flight.serverOpenTime + ':f>';
+
+    return new EmbedBuilder()
+        .setTitle('<:e_plane:1397829563249328138> ' + flight.flightNumber)
+        .setColor(0x3D1643)
+        .setDescription(
+            'A new flight has been scheduled. Please read related information regarding this departure below and **allocate** using the linked thread.'
+        )
+        .addFields({ name: '\u200b', value: bullets });
+}
+
+module.exports = { buildFlightInfoEmbed, buildAllocationEmbed, buildArchiveEmbed, buildFlightCardEmbed };
