@@ -295,6 +295,20 @@ function setupMilesRoute(app) {
             return res.json({ ok: true, result: result, userId: who.userId });
         } catch (err) { return fail(res, err, 'upgrade'); }
     });
+
+    // ---- WRITE: run the upgrade lottery (staff, Phase 7) --------------------
+    app.post('/api/miles/lottery', async function (req, res) {
+        if (!keyOk(req, res)) return; if (!sbOk(res)) return;
+        var b = req.body || {};
+        if (!b.flightId) return res.status(400).json({ ok: false, error: 'flightId required' });
+        var openSeats = b.openSeats || {};
+        try {
+            var result = await sb.rpc('run_upgrade_lottery', {
+                p_flight_id: b.flightId, p_open_seats: openSeats,
+            });
+            return res.json({ ok: true, result: result });
+        } catch (err) { return fail(res, err, 'lottery'); }
+    });
 }
 
 module.exports = { setupMilesRoute };
