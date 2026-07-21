@@ -38,7 +38,7 @@ function fmt(n) {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('miles')
+        .setName('mymiles')
         .setDescription('View your MileagePlus miles, status, and progress to the next tier'),
 
     async execute(interaction) {
