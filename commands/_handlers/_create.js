@@ -4,8 +4,7 @@ const {
 } = require('discord.js');
 var Flight = require('../../models/Flight');
 var { getAircraftChoices, AIRCRAFT } = require('../../config/aircraft');
-var { buildFlightInfoEmbed, buildAllocationEmbed } = require('../../utils/embed');
-var { updateAllCalendars } = require('../../utils/calendar');
+var { updateAllCalendars, postAllocationThread } = require('../../utils/calendar');
 var { postFlightAnnouncement } = require('../../utils/announce');
 var ids = require('../../config/ids');
 
@@ -148,28 +147,17 @@ module.exports = {
             return interaction.editReply({ content: '\u274C Database error.', embeds: [], components: [] });
         }
 
-        // Post to forum
+        // Post the allocation sheet as a thread off a freshly-reposted Volare
+        // calendar message. forumThreadId/forumMessageId are reused so /allocate,
+        // /unallocate, /edit, /end, /delete, /flight recover all keep working.
         try {
-            var guild = interaction.client.guilds.cache.get(ids.STAFF_SERVER_ID);
-            var forum = guild ? guild.channels.cache.get(ids.FORUM_CHANNEL_ID) : null;
-            if (forum) {
-                var infoEmbed = buildFlightInfoEmbed(flight);
-                var allocEmbed = buildAllocationEmbed(flight);
-                if (typeInfo.color) {
-                    infoEmbed.setColor(typeInfo.color);
-                    allocEmbed.setColor(typeInfo.color);
-                }
-                var threadName = typeInfo.threadPrefix + flight.flightNumber + ' - Crew Allocation';
-                var thread = await forum.threads.create({
-                    name: threadName,
-                    message: { content: '@everyone', embeds: [infoEmbed, allocEmbed] },
-                });
-                var starter = await thread.fetchStarterMessage();
-                flight.forumThreadId = thread.id;
-                flight.forumMessageId = starter ? starter.id : null;
+            var result = await postAllocationThread(interaction.client, flight, { color: typeInfo.color, ping: true });
+            if (result && result.thread) {
+                flight.forumThreadId = result.thread.id;
+                flight.forumMessageId = result.starter ? result.starter.id : null;
                 await flight.save();
             }
-        } catch (err) { console.error('[Create] Forum error:', err); }
+        } catch (err) { console.error('[Create] Allocation thread error:', err); }
 
         // Update all calendars (each filters by type internally)
         try { await updateAllCalendars(interaction.client); } catch (err) { console.error('[Create] Calendar error:', err); }
