@@ -7,6 +7,8 @@ const Suggestion = require('../models/Suggestion');
 var VOLARE_GUILD_ID = '1309560657473179679';
 var SUGGESTIONS_CHANNEL_ID = '1496296505709953024';
 var APPROVAL_CHANNEL_ID = '1496348536088957009';
+// Role pinged when a new suggestion is posted (replaces the old @everyone ping).
+var SUGGESTIONS_PING_ROLE_ID = '1529228758878392452';
 
 var UPVOTE_EMOJI = { id: '1408484391348605069', name: 'volare_check' };
 var DOWNVOTE_EMOJI = { id: '1408484388681027614', name: 'volare_reject' };
@@ -369,11 +371,13 @@ module.exports = {
             });
         }
 
-        // Ghost ping @everyone (send, then delete so the notification fires with no lingering message)
+        // Ghost ping the suggestions role (send, then delete so the notification
+        // fires with no lingering message). allowedMentions scopes it to that one
+        // role so nothing else gets pinged.
         try {
             var pingMsg = await channel.send({
-                content: '@everyone',
-                allowedMentions: { parse: ['everyone'] },
+                content: '<@&' + SUGGESTIONS_PING_ROLE_ID + '>',
+                allowedMentions: { roles: [SUGGESTIONS_PING_ROLE_ID] },
             });
             await pingMsg.delete().catch(function() {});
         } catch (err) {
