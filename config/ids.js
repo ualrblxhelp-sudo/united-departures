@@ -8,7 +8,9 @@ module.exports = {
     FLIGHT_HOST_ROLE_ID: process.env.FLIGHT_HOST_ROLE_ID,
     UNITED_TAIL_EMOJI: process.env.UNITED_TAIL_EMOJI || '\u2708\uFE0F',
     EMBED_COLOR: parseInt(process.env.EMBED_COLOR || '0b0fa8', 16),
-    STAFF_CALENDAR_CHANNEL_ID: process.env.STAFF_CALENDAR_CHANNEL_ID,
+    // Volare (staff) flight calendar. Allocation sheets are now threads spawned
+    // off a reposted calendar message in THIS channel (the forum is retired).
+    STAFF_CALENDAR_CHANNEL_ID: process.env.STAFF_CALENDAR_CHANNEL_ID || '1309566352662462579',
     PREMIUM_CALENDAR_CHANNEL_ID: process.env.PREMIUM_CALENDAR_CHANNEL_ID,
     // Channel (main server) where public flight announcements are posted.
     FLIGHT_ANNOUNCE_CHANNEL_ID: process.env.FLIGHT_ANNOUNCE_CHANNEL_ID || '1309648814533115954',
