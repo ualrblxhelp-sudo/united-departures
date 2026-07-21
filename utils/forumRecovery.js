@@ -61,24 +61,33 @@ async function inspectThread(client, flight) {
     var guild = client.guilds.cache.get(ids.STAFF_SERVER_ID);
     if (!guild) return 'unknown';
 
-    var cached = guild.channels.cache.get(flight.forumThreadId);
-    if (cached) return cached.archived ? 'archived' : 'live';
-
-    try {
-        var thread = await guild.channels.fetch(flight.forumThreadId);
-        if (!thread) return 'missing';
-        return thread.archived ? 'archived' : 'live';
-    } catch (err) {
-        // 10003 = Unknown Channel (the thread was deleted). Only this — and an
-        // explicit 404 — counts as "missing". Everything else (network blips,
-        // 5xx, rate limits, permissions) is treated as 'unknown' so we never
-        // recreate a thread that may actually still exist.
-        if (err && (err.code === 10003 || err.status === 404 || err.httpStatus === 404)) {
-            return 'missing';
+    var thread = guild.channels.cache.get(flight.forumThreadId);
+    if (!thread) {
+        try {
+            thread = await guild.channels.fetch(flight.forumThreadId);
+        } catch (err) {
+            // 10003 = Unknown Channel (the thread was deleted). Only this — and an
+            // explicit 404 — counts as "missing". Everything else (network blips,
+            // 5xx, rate limits, permissions) is treated as 'unknown' so we never
+            // recreate a thread that may actually still exist.
+            if (err && (err.code === 10003 || err.status === 404 || err.httpStatus === 404)) {
+                return 'missing';
+            }
+            console.error('[ForumRecovery] Thread inspect error for flight ' + flight.flightNumber + ':', err && err.message ? err.message : err);
+            return 'unknown';
         }
-        console.error('[ForumRecovery] Thread inspect error for flight ' + flight.flightNumber + ':', err && err.message ? err.message : err);
-        return 'unknown';
     }
+    if (!thread) return 'missing';
+
+    // Location check: a thread that lives anywhere other than the CURRENT Volare
+    // calendar channel is stale — e.g. a leftover from the retired forum after a
+    // channel migration. Treat it as missing so it's recreated in the right place
+    // instead of being reported as "still exists".
+    if (thread.parentId && thread.parentId !== ids.STAFF_CALENDAR_CHANNEL_ID) {
+        return 'missing';
+    }
+
+    return thread.archived ? 'archived' : 'live';
 }
 
 // Recreate the allocation thread for a flight from its stored data and persist
