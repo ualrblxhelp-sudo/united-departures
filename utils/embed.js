@@ -125,7 +125,7 @@ function buildFlightCardEmbed(flight) {
         '\u2022 <t:' + flight.serverOpenTime + ':f>';
 
     return new EmbedBuilder()
-        .setTitle('<:e_plane:1397829563249328138> ' + flight.flightNumber)
+        .setTitle('<:volare_plane:1408298312448086056> ' + flight.flightNumber)
         .setColor(0x3D1643)
         .setDescription(
             'A new flight has been scheduled. Please read related information regarding this departure below and **allocate** using the linked thread.'
