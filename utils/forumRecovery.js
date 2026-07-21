@@ -8,7 +8,7 @@
 // self-heal that mirrors the calendar's self-healing behaviour.
 
 var Flight = require('../models/Flight');
-var { buildFlightInfoEmbed, buildAllocationEmbed } = require('./embed');
+var calendar = require('./calendar');
 var ids = require('../config/ids');
 
 // Type prefix/colour must match _create.js so a recovered post looks identical
@@ -45,16 +45,10 @@ function delay(ms) {
     return new Promise(function(resolve) { setTimeout(resolve, ms); });
 }
 
-// Resolve the staff-server forum channel, tolerating a cold cache by falling
-// back to an explicit fetch. Returns null if it genuinely can't be reached.
+// Resolve the Volare calendar channel (where allocation threads now live),
+// tolerating a cold cache. Returns null if it genuinely can't be reached.
 async function getForumChannel(client) {
-    var guild = client.guilds.cache.get(ids.STAFF_SERVER_ID);
-    if (!guild) return null;
-    var forum = guild.channels.cache.get(ids.FORUM_CHANNEL_ID);
-    if (!forum) {
-        forum = await guild.channels.fetch(ids.FORUM_CHANNEL_ID).catch(function() { return null; });
-    }
-    return forum || null;
+    return calendar.getStaffCalendarChannel(client);
 }
 
 // Classify the current state of a flight's stored forum thread.
@@ -94,34 +88,21 @@ async function recreateForumThread(client, flight, options) {
     options = options || {};
     var ping = options.ping !== false; // default: ping @everyone
 
-    var forum = await getForumChannel(client);
-    if (!forum) throw new Error('Forum channel unavailable (guild or channel not reachable).');
-
     var typeInfo = FLIGHT_TYPES[flight.flightType] || FLIGHT_TYPES.regular;
 
-    var infoEmbed = buildFlightInfoEmbed(flight);
-    var allocEmbed = buildAllocationEmbed(flight);
-    if (typeInfo.color) {
-        infoEmbed.setColor(typeInfo.color);
-        allocEmbed.setColor(typeInfo.color);
+    // Reposts a Volare calendar message and spawns the allocation thread off it,
+    // identical to /create. Persists the new thread/message IDs so /allocate,
+    // /unallocate, /edit, /end, /delete all point at the recreated thread.
+    var result = await calendar.postAllocationThread(client, flight, { color: typeInfo.color, ping: ping });
+    if (!result || !result.thread) {
+        throw new Error('Volare calendar channel unavailable (guild or channel not reachable).');
     }
 
-    var threadName = typeInfo.threadPrefix + flight.flightNumber + ' - Crew Allocation';
-    // A forum thread must have a starter message. Use a zero-width char when we
-    // deliberately don't want to ping (silent self-heal mode).
-    var content = ping ? '@everyone' : '\u200b';
-
-    var thread = await forum.threads.create({
-        name: threadName,
-        message: { content: content, embeds: [infoEmbed, allocEmbed] },
-    });
-
-    var starter = await thread.fetchStarterMessage().catch(function() { return null; });
-    flight.forumThreadId = thread.id;
-    flight.forumMessageId = starter ? starter.id : null;
+    flight.forumThreadId = result.thread.id;
+    flight.forumMessageId = result.starter ? result.starter.id : null;
     await flight.save();
 
-    return thread;
+    return result.thread;
 }
 
 // Startup self-heal: walk live flights, and for any whose stored thread is
@@ -134,7 +115,7 @@ async function selfHealForumThreads(client) {
     try {
         var forum = await getForumChannel(client);
         if (!forum) {
-            console.warn('[ForumRecovery] Forum channel not reachable at startup; skipping self-heal this run.');
+            console.warn('[ForumRecovery] Volare calendar channel not reachable at startup; skipping self-heal this run.');
             return;
         }
 
@@ -155,7 +136,7 @@ async function selfHealForumThreads(client) {
             console.warn(
                 '[ForumRecovery] Self-heal found ' + missing.length + ' missing allocation posts, ' +
                 'which exceeds the safety cap of ' + MAX_AUTO_RECOVERIES_PER_RUN + '. ' +
-                'This can indicate the forum channel itself was recreated (new FORUM_CHANNEL_ID). ' +
+                'This can indicate the Volare calendar channel itself was recreated (new STAFF_CALENDAR_CHANNEL_ID). ' +
                 'NOT auto-reposting to avoid mass @everyone pings — use /flight recover manually.'
             );
             return;
