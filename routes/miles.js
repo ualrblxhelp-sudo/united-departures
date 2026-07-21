@@ -264,6 +264,37 @@ function setupMilesRoute(app) {
             return res.json({ ok: true, result: result });
         } catch (err) { return fail(res, err, 'upgrade'); }
     });
+
+    // ---- READ: staff upgrade cost preview (full award price x 0.95^count) ----
+    app.get('/api/miles/upgrade/cost', async function (req, res) {
+        if (!keyOk(req, res)) return; if (!sbOk(res)) return;
+        try {
+            var who = await resolveUser({ username: req.query.username, userId: req.query.userId });
+            if (!who) return res.status(404).json({ ok: false, error: 'Roblox user not found' });
+            var result = await sb.rpc('upgrade_cost', {
+                p_user_id: who.userId, p_cabin: req.query.cabin, p_haul: req.query.haul,
+            });
+            return res.json({ ok: true, result: result, userId: who.userId });
+        } catch (err) { return fail(res, err, 'upgrade/cost'); }
+    });
+
+    // ---- WRITE: staff upgrade a passenger (gift or miles) --------------------
+    app.post('/api/miles/upgrade', async function (req, res) {
+        if (!keyOk(req, res)) return; if (!sbOk(res)) return;
+        var b = req.body || {};
+        if (!b.flightId) return res.status(400).json({ ok: false, error: 'flightId required' });
+        if (CABINS.indexOf(b.cabin) === -1) return res.status(400).json({ ok: false, error: 'invalid cabin' });
+        try {
+            var who = await resolveUser(b);
+            if (!who) return res.status(404).json({ ok: false, error: 'Roblox user not found' });
+            var result = await sb.rpc('upgrade_passenger', {
+                p_flight_id: b.flightId, p_user_id: who.userId, p_username: who.username,
+                p_cabin: b.cabin, p_haul: b.haul, p_seat: b.seat || null,
+                p_pay_with_miles: !!b.payWithMiles,
+            });
+            return res.json({ ok: true, result: result, userId: who.userId });
+        } catch (err) { return fail(res, err, 'upgrade'); }
+    });
 }
 
 module.exports = { setupMilesRoute };
