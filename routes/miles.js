@@ -11,6 +11,7 @@
 // key, so no Supabase credential ever ships inside a Roblox place.
 
 var sb = require('../services/supabase');
+var attendanceUtil = require('../utils/attendance');
 var roblox = require('../services/roblox');
 var bloxlink = require('../services/bloxlink');
 
@@ -50,7 +51,12 @@ function fail(res, err, tag) {
     return res.status(500).json({ ok: false, error: 'Internal error' });
 }
 
-function setupMilesRoute(app) {
+// The Discord client is captured at setup so payout can post the attendance
+// embed. It stays optional: if it isn't passed, attendance records still save.
+var discordClient = null;
+
+function setupMilesRoute(app, client) {
+    discordClient = client || null;
 
     // ---- READ: member status (mystatus GUI, hub, phone, staff lookup) --------
     app.get('/api/miles/status', async function (req, res) {
@@ -153,10 +159,27 @@ function setupMilesRoute(app) {
     // ---- WRITE: pay out a flight (staff MileagePlus Payout) -----------------
     app.post('/api/miles/payout', async function (req, res) {
         if (!keyOk(req, res)) return; if (!sbOk(res)) return;
-        if (!req.body || !req.body.flightId) return res.status(400).json({ ok: false, error: 'flightId required' });
+        var b = req.body || {};
+        if (!b.flightId) return res.status(400).json({ ok: false, error: 'flightId required' });
         try {
-            var result = await sb.rpc('pay_out_flight', { p_flight_id: req.body.flightId });
-            return res.json({ ok: true, result: result });
+            var result = await sb.rpc('pay_out_flight', { p_flight_id: b.flightId });
+
+            // Staff attendance is a side-effect of payout: it must never be able
+            // to fail the payout itself, so it runs after the RPC and its errors
+            // are reported alongside rather than thrown.
+            var attendance = null;
+            if (Array.isArray(b.attendance) && b.attendance.length) {
+                attendance = await attendanceUtil.recordAttendance(discordClient, {
+                    flightId: b.flightId,
+                    flightCode: b.flightCode,
+                    route: b.route,
+                    recordedBy: b.recordedBy,
+                    minRank: b.minRank,
+                    attendance: b.attendance,
+                });
+            }
+
+            return res.json({ ok: true, result: result, attendance: attendance });
         } catch (err) { return fail(res, err, 'payout'); }
     });
 
