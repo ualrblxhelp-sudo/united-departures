@@ -14,6 +14,10 @@ module.exports = {
     PREMIUM_CALENDAR_CHANNEL_ID: process.env.PREMIUM_CALENDAR_CHANNEL_ID,
     // Channel (main server) where public flight announcements are posted.
     FLIGHT_ANNOUNCE_CHANNEL_ID: process.env.FLIGHT_ANNOUNCE_CHANNEL_ID || '1309648814533115954',
+    // United Aviate training server.
+    AVIATE_SERVER_ID: process.env.AVIATE_SERVER_ID || '1309619225828266086',
+    TRAINING_LOG_CHANNEL_ID: process.env.TRAINING_LOG_CHANNEL_ID || '1528186069407895572',
+    TRAINING_STAFF_ROLE_ID: process.env.TRAINING_STAFF_ROLE_ID || '1335808165538955387',
     // Volare (staff) briefing channel for crew callouts before departure.
     BRIEFING_CHANNEL_ID: process.env.BRIEFING_CHANNEL_ID || '1528984319614259363',
     // Permanent Roblox hub link used in Discord scheduled events and panel announcements.
