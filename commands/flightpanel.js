@@ -29,6 +29,7 @@ var ids = require('../config/ids');
 var NAVY = 0x3D1643;
 var GREEN = 0x2EB860;
 var RED = 0xD64545;
+var PANEL_BUTTON_STYLE = ButtonStyle.Secondary;
 
 // userId -> { flightId, mode } for multi-step actions (confirms, modals).
 var sessions = new Map();
@@ -115,13 +116,14 @@ function panelRows(flight, flights) {
 
     if (flight.status === 'scheduled') {
         rows.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('fp_start').setLabel('Start Flight').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('fp_edit').setLabel('Edit Details').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('fp_recover').setLabel('Recover Sheet').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId('fp_start').setLabel('Start Flight').setStyle(PANEL_BUTTON_STYLE),
+            new ButtonBuilder().setCustomId('fp_briefing').setLabel('Start Briefing').setStyle(PANEL_BUTTON_STYLE),
+            new ButtonBuilder().setCustomId('fp_edit').setLabel('Edit Details').setStyle(PANEL_BUTTON_STYLE),
+            new ButtonBuilder().setCustomId('fp_recover').setLabel('Recover Sheet').setStyle(PANEL_BUTTON_STYLE)
         ));
         rows.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('fp_cancel').setLabel('Cancel Flight').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('fp_refresh').setLabel('Refresh').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId('fp_cancel').setLabel('Cancel Flight').setStyle(PANEL_BUTTON_STYLE),
+            new ButtonBuilder().setCustomId('fp_refresh').setLabel('Refresh').setStyle(PANEL_BUTTON_STYLE)
         ));
     } else {
         rows.push(new ActionRowBuilder().addComponents(
@@ -129,7 +131,6 @@ function panelRows(flight, flights) {
                 .setCustomId('fp_announce')
                 .setPlaceholder('Make an announcement\u2026')
                 .addOptions(
-                    { label: 'Staff Briefing', value: 'briefing', description: 'Posted in the crew allocation thread' },
                     { label: 'Server Opening', value: 'opening', description: 'Public \u2014 the server is now open' },
                     { label: 'Boarding Call', value: 'boarding', description: 'Public \u2014 boarding has begun' },
                     { label: 'Final Call', value: 'final', description: 'Public \u2014 last call for boarding' },
@@ -137,9 +138,10 @@ function panelRows(flight, flights) {
                 )
         ));
         rows.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('fp_end').setLabel('End Flight').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('fp_edit').setLabel('Edit Details').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('fp_refresh').setLabel('Refresh').setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId('fp_end').setLabel('End Flight').setStyle(PANEL_BUTTON_STYLE),
+            new ButtonBuilder().setCustomId('fp_briefing').setLabel('Start Briefing').setStyle(PANEL_BUTTON_STYLE),
+            new ButtonBuilder().setCustomId('fp_edit').setLabel('Edit Details').setStyle(PANEL_BUTTON_STYLE),
+            new ButtonBuilder().setCustomId('fp_refresh').setLabel('Refresh').setStyle(PANEL_BUTTON_STYLE)
         ));
     }
     return rows;
@@ -185,16 +187,6 @@ async function loadOwned(interaction) {
 // ---- announcements --------------------------------------------------------
 
 var ANNOUNCEMENTS = {
-    briefing: {
-        label: 'Staff Briefing',
-        target: 'thread',
-        build: function (f) {
-            return '<:volare_plane:1408298312448086056> **Staff Briefing \u2014 ' + f.flightNumber + '**\n' +
-                '> Crew, please report for briefing. We are operating **' + f.departure + ' \u27A1 ' + f.destination +
-                '** on the **' + f.aircraft + '**.\n' +
-                '> Ensure you are in position and in uniform before passengers board.';
-        },
-    },
     opening: {
         label: 'Server Opening',
         target: 'public',
@@ -245,6 +237,30 @@ async function announceTarget(client, flight, kind) {
         return thread;
     }
     return client.channels.fetch(ids.FLIGHT_ANNOUNCE_CHANNEL_ID).catch(function () { return null; });
+}
+
+async function sendChannelPing(client, channelId, content) {
+    var channel = await client.channels.fetch(channelId).catch(function () { return null; });
+    if (!channel || typeof channel.send !== 'function') return false;
+    await channel.send({
+        content: content,
+        allowedMentions: { parse: ['everyone'] },
+    });
+    return true;
+}
+
+function startFlightMessage(flight) {
+    return '@everyone\n' +
+        '<:volare_plane:1408298312448086056> **Now Boarding \u2014 ' + flight.flightNumber + '**\n' +
+        '> Flight **' + flight.flightNumber + '** (**' + flight.departure + ' \u27A1 ' + flight.destination + '**) is now starting.\n' +
+        '> Join the airport here: ' + ids.AIRPORT_LINK;
+}
+
+function startBriefingMessage(flight) {
+    return '@everyone\n' +
+        '<:volare_plane:1408298312448086056> **Start Briefing \u2014 ' + flight.flightNumber + '**\n' +
+        '> Crew briefing is starting now for **' + flight.departure + ' \u27A1 ' + flight.destination + '** on the **' + flight.aircraft + '**.\n' +
+        '> Join the airport here: ' + ids.AIRPORT_LINK;
 }
 
 // ---- command --------------------------------------------------------------
@@ -371,10 +387,49 @@ module.exports = {
             flight.status = 'active';
             flight.startedAt = new Date();
             await flight.save();
-            try { await updateAllCalendars(interaction.client); } catch (e) { console.error('[FlightPanel] Calendar:', e); }
+
+            var startedPosted = false;
+            try {
+                startedPosted = await sendChannelPing(interaction.client, ids.FLIGHT_ANNOUNCE_CHANNEL_ID, startFlightMessage(flight));
+            } catch (err) {
+                console.error('[FlightPanel] Start announce error:', err);
+            }
+
+            if (!flight.announcementsSent) flight.announcementsSent = [];
+            if (flight.announcementsSent.indexOf('Start Flight') === -1) {
+                flight.announcementsSent.push('Start Flight');
+                await flight.save();
+            }
+
             await renderPanel(interaction, flight._id);
             return interaction.followUp({
-                content: '<:volare_check:1408484391348605069> **' + flight.flightNumber + '** is now in progress. Announcement options are unlocked.',
+                content: startedPosted
+                    ? '<:volare_check:1408484391348605069> **' + flight.flightNumber + '** is now in progress and the public join ping was posted.'
+                    : '\u26A0\uFE0F **' + flight.flightNumber + '** is now in progress, but I could not post the public join ping.',
+                ephemeral: true,
+            });
+        }
+
+        // ---- crew briefing ----
+        if (id === 'fp_briefing') {
+            var briefingPosted = false;
+            try {
+                briefingPosted = await sendChannelPing(interaction.client, ids.BRIEFING_CHANNEL_ID, startBriefingMessage(flight));
+            } catch (err) {
+                console.error('[FlightPanel] Briefing announce error:', err);
+            }
+
+            if (!flight.announcementsSent) flight.announcementsSent = [];
+            if (flight.announcementsSent.indexOf('Start Briefing') === -1) {
+                flight.announcementsSent.push('Start Briefing');
+                await flight.save();
+            }
+
+            await renderPanel(interaction, flight._id);
+            return interaction.followUp({
+                content: briefingPosted
+                    ? '<:volare_check:1408484391348605069> **Start Briefing** was posted in the Volare briefing channel.'
+                    : '\u26A0\uFE0F I could not post **Start Briefing** in the Volare briefing channel.',
                 ephemeral: true,
             });
         }
@@ -416,8 +471,8 @@ module.exports = {
                 embeds: [],
                 components: [new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId(isCancel ? 'fp_confirm_cancel' : 'fp_confirm_end')
-                        .setLabel(isCancel ? 'Cancel Flight' : 'End Flight').setStyle(ButtonStyle.Danger),
-                    new ButtonBuilder().setCustomId('fp_abort').setLabel('Go Back').setStyle(ButtonStyle.Secondary)
+                        .setLabel(isCancel ? 'Cancel Flight' : 'End Flight').setStyle(PANEL_BUTTON_STYLE),
+                    new ButtonBuilder().setCustomId('fp_abort').setLabel('Go Back').setStyle(PANEL_BUTTON_STYLE)
                 )],
             });
         }
