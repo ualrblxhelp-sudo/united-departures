@@ -14,4 +14,10 @@ module.exports = {
     PREMIUM_CALENDAR_CHANNEL_ID: process.env.PREMIUM_CALENDAR_CHANNEL_ID,
     // Channel (main server) where public flight announcements are posted.
     FLIGHT_ANNOUNCE_CHANNEL_ID: process.env.FLIGHT_ANNOUNCE_CHANNEL_ID || '1309648814533115954',
+    // Volare (staff) channel where flight attendance embeds are posted at payout.
+    // Set ATTENDANCE_CHANNEL_ID in Render; falls back to the staff calendar
+    // channel so the feature still works before it's configured.
+    ATTENDANCE_CHANNEL_ID: process.env.ATTENDANCE_CHANNEL_ID || process.env.STAFF_CALENDAR_CHANNEL_ID || '1309566352662462579',
+    // Minimum Roblox group rank counted as "on duty" for attendance.
+    ATTENDANCE_MIN_RANK: parseInt(process.env.ATTENDANCE_MIN_RANK || '50', 10),
 };
