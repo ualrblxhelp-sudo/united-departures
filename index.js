@@ -12,6 +12,7 @@ const flightsApi = require('./routes/flights');
 const airportsApi = require('./routes/airports');
 const milesApi = require('./routes/miles');
 const milesCycle = require('./utils/milesCycle');
+const ids = require('./config/ids');
 expressApp.use(express.json());
 
 const client = new Client({
@@ -154,11 +155,12 @@ client.once(Events.ClientReady, async function(c) {
         // bot is in (and in DMs). Anything listed here MUST be excluded from the
         // guild registrations below, or it will show up twice in that guild.
         var globalCommands = ['mymiles', 'addmiles', 'removemiles', 'rankupmiles'];
+        var aviateCommands = ['traininglog', 'attendance'];
 
         // --- Volare staff server: every command EXCEPT the global ones ---
         var cmds = [];
         client.commands.forEach(function(cmd) {
-            if (globalCommands.indexOf(cmd.data.name) === -1) {
+            if (globalCommands.indexOf(cmd.data.name) === -1 && aviateCommands.indexOf(cmd.data.name) === -1) {
                 cmds.push(cmd.data.toJSON());
             }
         });
@@ -178,6 +180,18 @@ client.once(Events.ClientReady, async function(c) {
         if (process.env.CALENDAR_SERVER_ID) {
             await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.CALENDAR_SERVER_ID), { body: publicCmds });
             console.log('Public commands registered to main server (' + publicCmds.length + ')');
+        }
+
+        // --- United Aviate: training staff commands only ---
+        var aviateCmds = [];
+        client.commands.forEach(function(cmd) {
+            if (aviateCommands.indexOf(cmd.data.name) !== -1) {
+                aviateCmds.push(cmd.data.toJSON());
+            }
+        });
+        if (ids.AVIATE_SERVER_ID) {
+            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, ids.AVIATE_SERVER_ID), { body: aviateCmds });
+            console.log('Training commands registered to Aviate (' + aviateCmds.length + ')');
         }
 
         // --- GLOBAL: miles commands, available in every server + DMs ---
