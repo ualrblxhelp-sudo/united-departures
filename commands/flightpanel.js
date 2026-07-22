@@ -251,16 +251,26 @@ async function sendChannelPing(client, channelId, content) {
 
 function startFlightMessage(flight) {
     return '@everyone\n' +
-        '<:volare_plane:1408298312448086056> **Now Boarding \u2014 ' + flight.flightNumber + '**\n' +
-        '> Flight **' + flight.flightNumber + '** (**' + flight.departure + ' \u27A1 ' + flight.destination + '**) is now starting.\n' +
-        '> Join the airport here: ' + ids.AIRPORT_LINK;
+        '> ### <:e_plane:1397829563249328138> **' + flight.flightNumber + '**\n' +
+        '-# **Good Leads the Way** — United Operations\n' +
+        '\n' +
+        '> <:e_arrow:1406847964655259710> United Airlines invites all passengers to join the [UAL Hub](<' + ids.AIRPORT_LINK + '>) in preparation for ' + flight.flightNumber + ' from **' + flight.departure + '** to **' + flight.destination + '**. Information about the flight can be found by viewing the event card for this flight.\n' +
+        '\n' +
+        '> -#  <a:UnitedPassport:1029754095055142982> Please arrive at the airport with all necessary **travel documents** for this trip.\n' +
+        '\n' +
+        '-# <:d_staralliance:1397830727919337493> ᴀ ꜱᴛᴀʀ ᴀʟʟɪᴀɴᴄᴇ ᴍᴇᴍʙᴇʀ';
 }
 
 function startBriefingMessage(flight) {
     return '@everyone\n' +
-        '<:volare_plane:1408298312448086056> **Start Briefing \u2014 ' + flight.flightNumber + '**\n' +
-        '> Crew briefing is starting now for **' + flight.departure + ' \u27A1 ' + flight.destination + '** on the **' + flight.aircraft + '**.\n' +
-        '> Join the airport here: ' + ids.AIRPORT_LINK;
+        '> ### <:volare_fa:1408298318861176920> **Employee Briefing**\n' +
+        '-# **' + flight.flightNumber + '**— United Volare\n' +
+        '\n' +
+        '> <:volare_arrow:1408485394747490385> Employees allocated for ' + flight.flightNumber + ' from **' + flight.departure + '** to **' + flight.destination + '** are now called to join the [airport](<' + ids.AIRPORT_LINK + '>) specified in the allocations sheet for briefing and flight preparation. As a reminder, missing a flight you allocated for results in consequences.\n' +
+        '\n' +
+        '> -#  <:volare_arrow:1408485394747490385> Upon joining, please prepare your **attire** and wait patiently as the dispatcher briefs you.\n' +
+        '\n' +
+        '-# <:d_staralliance:1397830727919337493> ᴀ ꜱᴛᴀʀ ᴀʟʟɪᴀɴᴄᴇ ᴍᴇᴍʙᴇʀ';
 }
 
 // ---- command --------------------------------------------------------------
