@@ -239,19 +239,33 @@ async function announceTarget(client, flight, kind) {
     return client.channels.fetch(ids.FLIGHT_ANNOUNCE_CHANNEL_ID).catch(function () { return null; });
 }
 
-async function sendChannelPing(client, channelId, content) {
+async function sendChannelPing(client, channelId, content, options) {
+    options = options || {};
     var channel = await client.channels.fetch(channelId).catch(function () { return null; });
     if (!channel || typeof channel.send !== 'function') return false;
+
+    if (options.ghostPing) {
+        await channel.send({
+            content: content,
+            allowedMentions: { parse: [] },
+        });
+        var ping = await channel.send({
+            content: '@everyone',
+            allowedMentions: { parse: ['everyone'] },
+        });
+        await ping.delete().catch(function () {});
+        return true;
+    }
+
     await channel.send({
-        content: content,
+        content: '@everyone\n' + content,
         allowedMentions: { parse: ['everyone'] },
     });
     return true;
 }
 
 function startFlightMessage(flight) {
-    return '@everyone\n' +
-        '> ### <:e_plane:1397829563249328138> **' + flight.flightNumber + '**\n' +
+    return '> ### <:e_plane:1397829563249328138> **' + flight.flightNumber + '**\n' +
         '-# **Good Leads the Way** — United Operations\n' +
         '\n' +
         '> <:e_arrow:1406847964655259710> United Airlines invites all passengers to join the [UAL Hub](<' + ids.AIRPORT_LINK + '>) in preparation for ' + flight.flightNumber + ' from **' + flight.departure + '** to **' + flight.destination + '**. Information about the flight can be found by viewing the event card for this flight.\n' +
@@ -262,8 +276,7 @@ function startFlightMessage(flight) {
 }
 
 function startBriefingMessage(flight) {
-    return '@everyone\n' +
-        '> ### <:volare_fa:1408298318861176920> **Employee Briefing**\n' +
+    return '> ### <:volare_fa:1408298318861176920> **Employee Briefing**\n' +
         '-# **' + flight.flightNumber + '**— United Volare\n' +
         '\n' +
         '> <:volare_arrow:1408485394747490385> Employees allocated for ' + flight.flightNumber + ' from **' + flight.departure + '** to **' + flight.destination + '** are now called to join the [airport](<' + ids.AIRPORT_LINK + '>) specified in the allocations sheet for briefing and flight preparation. As a reminder, missing a flight you allocated for results in consequences.\n' +
@@ -400,7 +413,7 @@ module.exports = {
 
             var startedPosted = false;
             try {
-                startedPosted = await sendChannelPing(interaction.client, ids.FLIGHT_ANNOUNCE_CHANNEL_ID, startFlightMessage(flight));
+                startedPosted = await sendChannelPing(interaction.client, ids.FLIGHT_ANNOUNCE_CHANNEL_ID, startFlightMessage(flight), { ghostPing: true });
             } catch (err) {
                 console.error('[FlightPanel] Start announce error:', err);
             }
