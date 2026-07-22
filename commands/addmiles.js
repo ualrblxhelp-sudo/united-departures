@@ -1,6 +1,6 @@
 // commands/addmiles.js — grant MileagePlus miles to a Roblox member (staff).
 // Executor must be AT OR ABOVE role 1309642670406369331 in the MAIN United server.
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 var sb = require('../services/supabase');
 var roblox = require('../services/roblox');
 var perms = require('../services/permissions');
@@ -12,6 +12,13 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('addmiles')
         .setDescription('Grant MileagePlus miles to a Roblox member')
+        // These are staff commands and are registered GLOBALLY, so they appear in
+        // every server the bot is in -- including the main United server. This
+        // hides them from members who lack Manage Server in that guild.
+        // NOTE: this is VISIBILITY only. The real gate is the role check in
+        // execute() below, which runs regardless of where the command is invoked.
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .setDMPermission(false)
         .addStringOption(function (o) { return o.setName('username').setDescription('Roblox username').setRequired(true); })
         .addIntegerOption(function (o) { return o.setName('amount').setDescription('Miles to add').setRequired(true).setMinValue(1); }),
 
