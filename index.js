@@ -79,6 +79,10 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (id === 'bugreport_type') {
                 return await client.commands.get('bugreport').handleTypeSelect(interaction);
             }
+            // /flightpanel: every control is prefixed fp_, so one check routes them all.
+            if (id.indexOf('fp_') === 0) {
+                return await client.commands.get('flightpanel').handleSelect(interaction);
+            }
             return;
         }
 
@@ -104,6 +108,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             }
             if (mid === 'suggest_modal') {
                 return await client.commands.get('suggest').handleModalSubmit(interaction);
+            }
+            if (mid.indexOf('fp_') === 0) {
+                return await client.commands.get('flightpanel').handleModal(interaction);
             }
             return;
         }
@@ -142,6 +149,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             }
             if (bid === 'edit_replace_cancel') {
                 return await client.commands.get('flight').edit_handleReplaceCancel(interaction);
+            }
+            if (bid.indexOf('fp_') === 0) {
+                return await client.commands.get('flightpanel').handleButton(interaction);
             }
             if (bid.startsWith('inactivity_approve_')) {
                 var userId = bid.replace('inactivity_approve_', '');
