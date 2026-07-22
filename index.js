@@ -11,7 +11,7 @@ const expressApp = express();
 const flightsApi = require('./routes/flights');
 const airportsApi = require('./routes/airports');
 const milesApi = require('./routes/miles');
-const milesReset = require('./utils/milesReset');
+const milesCycle = require('./utils/milesCycle');
 expressApp.use(express.json());
 
 const client = new Client({
@@ -322,8 +322,9 @@ async function start() {
     airportsApi.setupAirportsRoute(expressApp);
     // Setup MileagePlus miles-engine API (Roblox surfaces + Discord /miles)
     milesApi.setupMilesRoute(expressApp, client);
-    // Start the annual (Jan 31) qualifying-reset scheduler
-    milesReset.startMilesReset();
+    // Start the rolling per-member qualifying-cycle sweep (6-month demotions).
+    // Replaces the old Jan 31 annual reset, which no longer matches the rules.
+    milesCycle.startMilesCycle();
 
     // Health check
     expressApp.get('/', function(req, res) { res.send('Bot is running'); });
