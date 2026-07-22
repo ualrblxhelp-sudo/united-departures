@@ -182,7 +182,7 @@ module.exports = {
                     scheduledEndTime: endTime,
                     privacyLevel: 2,
                     entityType: 3,
-                    entityMetadata: { location: 'https://www.roblox.com/games/95918419045248/Terminal-A-Newark-Liberty-Intl-Airport' },
+                    entityMetadata: { location: ids.AIRPORT_LINK },
                     description: 'Dispatcher - <@' + flight.dispatcherId + '>\nFlight Number - ' + flight.flightNumber + '\nIATA Route - ' + flight.departure + ' to ' + flight.destination + '\nAircraft - ' + flight.aircraft,
                 };
                 if (p.flightType === 'test') eventOptions.description += '\n\nThis is a test flight.';
@@ -229,3 +229,4 @@ module.exports = {
         await interaction.update({ content: '\u274C Cancelled.', embeds: [], components: [] });
     },
 };
+
