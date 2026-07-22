@@ -321,7 +321,7 @@ async function start() {
     // Setup live airport player-count API (Roblox Flight Hub)
     airportsApi.setupAirportsRoute(expressApp);
     // Setup MileagePlus miles-engine API (Roblox surfaces + Discord /miles)
-    milesApi.setupMilesRoute(expressApp);
+    milesApi.setupMilesRoute(expressApp, client);
     // Start the annual (Jan 31) qualifying-reset scheduler
     milesReset.startMilesReset();
 
