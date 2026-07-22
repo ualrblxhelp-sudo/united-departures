@@ -32,6 +32,19 @@ const flightSchema = new mongoose.Schema({
     status: { type: String, default: 'scheduled', enum: ['scheduled', 'active', 'completed', 'cancelled'] },
     createdAt: { type: Date, default: Date.now },
     archivedAt: { type: Date },
+
+    // Lifecycle timestamps used by /flightpanel.
+    // NOTE: completedAt was already being assigned in _end.js but was NOT
+    // declared here -- Mongoose strict mode silently dropped it on every save,
+    // so no flight has ever recorded a completion time. Declaring it fixes that.
+    startedAt: { type: Date },
+    completedAt: { type: Date },
+    cancelledAt: { type: Date },
+    cancelReason: { type: String },
+
+    // Ops announcements already sent for this flight, so the panel can show
+    // what's been done and avoid accidental duplicates.
+    announcementsSent: { type: [String], default: [] },
 });
 
 // Index for fast lookups
