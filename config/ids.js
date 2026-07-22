@@ -14,6 +14,10 @@ module.exports = {
     PREMIUM_CALENDAR_CHANNEL_ID: process.env.PREMIUM_CALENDAR_CHANNEL_ID,
     // Channel (main server) where public flight announcements are posted.
     FLIGHT_ANNOUNCE_CHANNEL_ID: process.env.FLIGHT_ANNOUNCE_CHANNEL_ID || '1309648814533115954',
+    // Volare (staff) briefing channel for crew callouts before departure.
+    BRIEFING_CHANNEL_ID: process.env.BRIEFING_CHANNEL_ID || '1528984319614259363',
+    // Permanent Roblox hub link used in Discord scheduled events and panel announcements.
+    AIRPORT_LINK: process.env.AIRPORT_LINK || 'https://www.roblox.com/games/76822570410442/UAL-Hub',
     // Volare (staff) channel where flight attendance embeds are posted at payout.
     // NOTE: a Render env var of the same name OVERRIDES this default. If embeds
     // land in the wrong channel, check Render's environment first.
