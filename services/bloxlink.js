@@ -42,4 +42,38 @@ async function discordToRoblox(discordId) {
     return { configured: true, linked: true, robloxId: Number(robloxId) };
 }
 
-module.exports = { configured, discordToRoblox };
+// Reverse direction: Roblox UserId -> linked Discord user id(s) in the guild.
+// Used by flight attendance so staff can be pinged in the Volare embed.
+// Returns one of:
+//   { configured: false }                         -> keys not set yet
+//   { configured: true, linked: false }           -> not verified / not in guild
+//   { configured: true, linked: true, discordId } -> resolved (first match)
+async function robloxToDiscord(robloxId) {
+    if (!configured()) return { configured: false };
+    var url = 'https://api.blox.link/v4/public/guilds/' +
+        process.env.BLOXLINK_GUILD_ID + '/roblox-to-discord/' + String(robloxId);
+
+    var res = await fetch(url, {
+        headers: { 'Authorization': process.env.BLOXLINK_API_KEY },
+    });
+
+    if (res.status === 404) return { configured: true, linked: false };
+
+    var data;
+    try { data = await res.json(); } catch (e) { data = null; }
+
+    if (!res.ok) {
+        var err = new Error('Bloxlink error (' + res.status + ')');
+        err.status = res.status;
+        err.body = data;
+        throw err;
+    }
+
+    // Bloxlink returns an array; a Roblox account can map to several Discord
+    // accounts in theory, so take the first.
+    var ids = data && (data.discordIDs || data.discordIds);
+    if (!ids || !ids.length) return { configured: true, linked: false };
+    return { configured: true, linked: true, discordId: String(ids[0]) };
+}
+
+module.exports = { configured, discordToRoblox, robloxToDiscord };
