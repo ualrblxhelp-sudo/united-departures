@@ -202,16 +202,15 @@ module.exports = {
                 flight.discordEventId = event.id;
                 await flight.save();
 
-                // Only regular flights post a public event in the main (calendar) server,
-                // so only those get the public announcement with a working event link.
-                if (eventServerId === ids.CALENDAR_SERVER_ID) {
+                // Only regular flights get a public announcement in the main server.
+                if (p.flightType === 'regular' && eventServerId === ids.CALENDAR_SERVER_ID) {
                     announcementEventLink = 'https://discord.com/events/' + ids.CALENDAR_SERVER_ID + '/' + event.id;
                 }
             }
         } catch (err) { console.error('[Create] Event error:', err); }
 
         // Public flight announcement -> main server announcement channel (+ ghost ping + reaction)
-        if (announcementEventLink) {
+        if (p.flightType === 'regular' && announcementEventLink) {
             try { await postFlightAnnouncement(interaction.client, flight, announcementEventLink); }
             catch (err) { console.error('[Create] Announcement error:', err); }
         }
@@ -229,4 +228,3 @@ module.exports = {
         await interaction.update({ content: '\u274C Cancelled.', embeds: [], components: [] });
     },
 };
-
