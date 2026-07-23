@@ -21,8 +21,10 @@ const {
 } = require('discord.js');
 
 var Flight = require('../models/Flight');
-var { updateAllCalendars } = require('../utils/calendar');
-var { buildArchiveEmbed } = require('../utils/embed');
+var { updateAllCalendars, buildAllocationThreadName } = require('../utils/calendar');
+var {
+    buildArchiveEmbed, buildFlightInfoEmbed, buildAllocationEmbed, buildFlightCardEmbed,
+} = require('../utils/embed');
 var { recreateForumThread } = require('../utils/forumRecovery');
 var ids = require('../config/ids');
 
@@ -607,9 +609,13 @@ module.exports = {
             }
         }
 
+        var failed = [];
         if (changes.length) {
             await flight.save();
-            try { await updateAllCalendars(interaction.client); } catch (e) { console.error('[FlightPanel] Calendar:', e); }
+            // Push the change everywhere the flight is displayed, not just the
+            // calendars. This previously only called updateAllCalendars, which
+            // is why edits appeared to do nothing to the sheet or the event.
+            failed = await propagateEdits(interaction.client, flight);
         }
 
         await renderPanel(interaction, flight._id);
@@ -618,10 +624,122 @@ module.exports = {
             ? '<:volare_check:1408484391348605069> Updated:\n\u2022 ' + changes.join('\n\u2022 ')
             : '\u2139\uFE0F No changes were made.';
         if (rejected.length) msg += '\n\n\u26A0\uFE0F Ignored:\n\u2022 ' + rejected.join('\n\u2022 ');
+        // Say so rather than reporting a clean success over a partial update.
+        if (failed.length) msg += '\n\n\u26A0\uFE0F Could not update: ' + failed.join(', ');
 
         return interaction.followUp({ content: msg, ephemeral: true });
     },
 };
+
+// ---- edit propagation -----------------------------------------------------
+// After ANY field change, the flight appears in four places that all have to be
+// rewritten or they keep showing stale data:
+//   1. the allocation sheet   (thread starter message: info + allocation embeds)
+//   2. the flight card        (the calendar message the thread hangs off)
+//   3. the thread name        ("UA1812 - DEN-SFO - 737-800")
+//   4. the Discord event      (name, times, description)
+// updateAllCalendars() only handles the calendar list, which is why edits
+// previously looked like they did nothing.
+//
+// Every step is independently pcall'd: a missing thread must not stop the event
+// from updating, and vice versa. Returns a list of what could NOT be updated so
+// the panel can tell the dispatcher instead of failing silently.
+async function propagateEdits(client, flight) {
+    var failed = [];
+    var guild = client.guilds.cache.get(ids.STAFF_SERVER_ID);
+
+    // --- 1 + 3: allocation sheet and thread name ---
+    try {
+        if (guild && flight.forumThreadId) {
+            var thread = guild.channels.cache.get(flight.forumThreadId);
+            if (!thread) thread = await guild.channels.fetch(flight.forumThreadId).catch(function () { return null; });
+
+            if (thread) {
+                if (flight.forumMessageId) {
+                    var msg = await thread.messages.fetch(flight.forumMessageId).catch(function () { return null; });
+                    if (msg) {
+                        await msg.edit({ embeds: [buildFlightInfoEmbed(flight), buildAllocationEmbed(flight)] });
+                    } else {
+                        failed.push('allocation sheet (message not found)');
+                    }
+                }
+                // Thread name carries the flight number, route and aircraft.
+                var wanted = buildAllocationThreadName(flight);
+                if (thread.name !== wanted) {
+                    await thread.setName(wanted).catch(function () {});
+                }
+            } else {
+                failed.push('allocation thread (not found)');
+            }
+        }
+    } catch (err) {
+        console.error('[FlightPanel] Sheet update error:', err);
+        failed.push('allocation sheet');
+    }
+
+    // --- 2: the flight card the thread hangs off ---
+    // A thread started from a message shares that message's id, so the card is
+    // fetched by forumThreadId in the calendar channel.
+    try {
+        if (guild && flight.forumThreadId) {
+            var calChannel = guild.channels.cache.get(ids.STAFF_CALENDAR_CHANNEL_ID);
+            if (!calChannel) calChannel = await guild.channels.fetch(ids.STAFF_CALENDAR_CHANNEL_ID).catch(function () { return null; });
+            if (calChannel) {
+                var card = await calChannel.messages.fetch(flight.forumThreadId).catch(function () { return null; });
+                if (card) {
+                    await card.edit({ embeds: [buildFlightCardEmbed(flight)] });
+                }
+            }
+        }
+    } catch (err) {
+        console.error('[FlightPanel] Card update error:', err);
+        failed.push('flight card');
+    }
+
+    // --- 4: Discord scheduled event ---
+    try {
+        if (flight.discordEventId) {
+            var prefix = '';
+            if (flight.flightType === 'test') prefix = '[TEST] ';
+            if (flight.flightType === 'premium') prefix = '[PREMIUM] ';
+
+            var servers = [ids.CALENDAR_SERVER_ID, ids.STAFF_SERVER_ID];
+            var updated = false;
+            for (var i = 0; i < servers.length; i++) {
+                var evGuild = client.guilds.cache.get(servers[i]);
+                if (!evGuild) continue;
+                var event = await evGuild.scheduledEvents.fetch(flight.discordEventId).catch(function () { return null; });
+                if (!event) continue;
+
+                await event.edit({
+                    name: prefix + flight.flightNumber + ' | ' + flight.departure + ' \u27A1 ' + flight.destination,
+                    scheduledStartTime: new Date(flight.serverOpenTime * 1000),
+                    scheduledEndTime: new Date((flight.serverOpenTime + 3600) * 1000),
+                    description: 'Dispatcher - <@' + flight.dispatcherId + '>\n' +
+                        'Flight Number - ' + flight.flightNumber + '\n' +
+                        'IATA Route - ' + flight.departure + ' to ' + flight.destination + '\n' +
+                        'Aircraft - ' + flight.aircraft,
+                });
+                updated = true;
+                break;
+            }
+            if (!updated) failed.push('Discord event (not found)');
+        }
+    } catch (err) {
+        console.error('[FlightPanel] Event update error:', err);
+        failed.push('Discord event');
+    }
+
+    // --- calendars last: cheapest and least likely to fail ---
+    try {
+        await updateAllCalendars(client);
+    } catch (err) {
+        console.error('[FlightPanel] Calendar error:', err);
+        failed.push('calendars');
+    }
+
+    return failed;
+}
 
 // ---- shared teardown helpers ---------------------------------------------
 
