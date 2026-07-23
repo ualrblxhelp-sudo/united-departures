@@ -485,7 +485,7 @@ module.exports = {
 
             var warn = isCancel
                 ? '\u26A0\uFE0F Cancel **' + flight.flightNumber + '** (' + flight.departure + ' \u27A1 ' + flight.destination + ')?\n\n' +
-                  'This archives the allocation sheet, deletes the Discord event, removes the flight from all calendars, and posts a **public cancellation announcement**. This cannot be undone.'
+                  'This archives the allocation sheet, deletes the Discord event, removes the flight from all calendars, and deletes the Volare allocation post/thread. This cannot be undone.'
                 : '\u26A0\uFE0F End **' + flight.flightNumber + '** (' + flight.departure + ' \u27A1 ' + flight.destination + ')?\n\n' +
                   'This marks the flight completed, locks the allocation thread and removes it from all calendars.';
 
@@ -535,22 +535,8 @@ module.exports = {
                 }
             } catch (err) { console.error('[FlightPanel] Archive error:', err); }
 
-            await lockThread(interaction.client, flight);
+            await deleteAllocationArtifacts(interaction.client, flight);
             await closeDiscordEvent(interaction.client, flight);
-
-            // Public cancellation notice.
-            try {
-                var ch = await interaction.client.channels.fetch(ids.FLIGHT_ANNOUNCE_CHANNEL_ID).catch(function () { return null; });
-                if (ch && typeof ch.send === 'function') {
-                    await ch.send({
-                        content: '<:volare_plane:1408298312448086056> **Flight Cancelled**\n' +
-                            '> Flight **' + flight.flightNumber + '** (**' + flight.departure + ' \u27A1 ' + flight.destination + '**), ' +
-                            'scheduled for <t:' + flight.serverOpenTime + ':F>, has been cancelled.\n' +
-                            '> We apologise for any inconvenience caused.',
-                        allowedMentions: { parse: [] },
-                    });
-                }
-            } catch (err) { console.error('[FlightPanel] Cancel announce error:', err); }
 
             flight.status = 'cancelled';
             flight.cancelledAt = new Date();
@@ -560,7 +546,7 @@ module.exports = {
             sessions.delete(interaction.user.id);
 
             return interaction.editReply({
-                content: '<:volare_check:1408484391348605069> **' + flight.flightNumber + '** has been cancelled, archived and announced.',
+                content: '<:volare_check:1408484391348605069> **' + flight.flightNumber + '** has been cancelled, archived, and removed from the Volare allocation channel.',
                 embeds: [], components: [],
             });
         }
@@ -664,4 +650,33 @@ async function closeDiscordEvent(client, flight) {
             if (event) { await event.delete().catch(function () {}); break; }
         }
     } catch (err) { console.error('[FlightPanel] Event delete error:', err); }
+}
+
+async function deleteAllocationArtifacts(client, flight) {
+    try {
+        var guild = client.guilds.cache.get(ids.STAFF_SERVER_ID);
+        if (!guild) return;
+
+        var thread = null;
+        if (flight.forumThreadId) {
+            thread = guild.channels.cache.get(flight.forumThreadId);
+            if (!thread) thread = await guild.channels.fetch(flight.forumThreadId).catch(function () { return null; });
+        }
+
+        var calendarChannel = guild.channels.cache.get(ids.STAFF_CALENDAR_CHANNEL_ID);
+        if (!calendarChannel) calendarChannel = await guild.channels.fetch(ids.STAFF_CALENDAR_CHANNEL_ID).catch(function () { return null; });
+
+        if (calendarChannel && flight.forumThreadId) {
+            var cardMessage = await calendarChannel.messages.fetch(flight.forumThreadId).catch(function () { return null; });
+            if (cardMessage) {
+                await cardMessage.delete().catch(function () {});
+            }
+        }
+
+        if (thread) {
+            await thread.delete().catch(function () {});
+        }
+    } catch (err) {
+        console.error('[FlightPanel] Allocation delete error:', err);
+    }
 }
