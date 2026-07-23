@@ -74,3 +74,4 @@ const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
     } catch (err) {
         console.error('Error:', err);
     }
+})();
