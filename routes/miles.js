@@ -47,8 +47,22 @@ async function resolveUser(src) {
 }
 
 function fail(res, err, tag) {
-    console.error('[Miles API] ' + tag + ':', err);
-    return res.status(500).json({ ok: false, error: 'Internal error' });
+    // Log the full error server-side (Render logs), including the Supabase RPC
+    // body when present -- that's where the real reason lives (a bad flightId,
+    // a SQL exception inside the Postgres function, etc.).
+    console.error('[Miles API] ' + tag + ':', err && err.message ? err.message : err);
+    if (err && err.body) {
+        console.error('[Miles API] ' + tag + ' supabase body:', JSON.stringify(err.body));
+    }
+    // Return a slightly more useful hint to the client without leaking internals.
+    // The Roblox side shows this after "Failed:".
+    var hint = 'Internal error';
+    if (err && err.body && (err.body.message || err.body.hint)) {
+        hint = String(err.body.message || err.body.hint).slice(0, 120);
+    } else if (err && err.message) {
+        hint = String(err.message).slice(0, 120);
+    }
+    return res.status(500).json({ ok: false, error: hint });
 }
 
 // The Discord client is captured at setup so payout can post the attendance
@@ -324,7 +338,26 @@ function setupMilesRoute(app, client) {
         if (!keyOk(req, res)) return; if (!sbOk(res)) return;
         var b = req.body || {};
         if (!b.flightId) return res.status(400).json({ ok: false, error: 'flightId required' });
-        var openSeats = b.openSeats || {};
+
+        // S is a SINGLE NUMBER: the SQL function computes R = S - paidCount, so
+        // p_open_seats must be an integer. Older Roblox builds sent a per-cabin
+        // OBJECT here, and the previous `|| {}` default also produced an object;
+        // either made the subtraction throw inside Postgres -> 500 "Internal
+        // error". Coerce defensively: accept a number, or sum an object's
+        // values if a legacy client still sends one.
+        var openSeats = b.openSeats;
+        if (openSeats && typeof openSeats === 'object') {
+            var total = 0;
+            for (var k in openSeats) {
+                var n = Number(openSeats[k]);
+                if (!isNaN(n)) total += n;
+            }
+            openSeats = total;
+        }
+        openSeats = Number(openSeats);
+        if (isNaN(openSeats) || openSeats < 0) openSeats = 0;
+        openSeats = Math.floor(openSeats);
+
         try {
             var result = await sb.rpc('run_upgrade_lottery', {
                 p_flight_id: b.flightId, p_open_seats: openSeats,
