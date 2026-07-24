@@ -339,28 +339,36 @@ function setupMilesRoute(app, client) {
         var b = req.body || {};
         if (!b.flightId) return res.status(400).json({ ok: false, error: 'flightId required' });
 
-        // S is a SINGLE NUMBER: the SQL function computes R = S - paidCount, so
-        // p_open_seats must be an integer. Older Roblox builds sent a per-cabin
-        // OBJECT here, and the previous `|| {}` default also produced an object;
-        // either made the subtraction throw inside Postgres -> 500 "Internal
-        // error". Coerce defensively: accept a number, or sum an object's
-        // values if a legacy client still sends one.
+        // p_open_seats must be a JSONB OBJECT: run_upgrade_lottery iterates it
+        // with jsonb_object_keys(). A scalar throws "cannot call
+        // jsonb_object_keys on a scalar"; an array (which is what an empty {}
+        // becomes if a client sends [] ) throws the same. Normalize to a plain
+        // per-cabin object, and reject early if it's empty rather than 500ing
+        // in Postgres.
         var openSeats = b.openSeats;
-        if (openSeats && typeof openSeats === 'object') {
-            var total = 0;
-            for (var k in openSeats) {
-                var n = Number(openSeats[k]);
-                if (!isNaN(n)) total += n;
+        if (Array.isArray(openSeats) || typeof openSeats !== 'object' || openSeats === null) {
+            // A number or array from an older/newer client -- fold into an
+            // object if we can, otherwise reject cleanly.
+            if (typeof openSeats === 'number' && openSeats > 0) {
+                // No cabin breakdown available; the SQL needs cabins, so we
+                // can't fabricate them. Ask the caller to send the map.
+                return res.status(400).json({ ok: false, error: 'openSeats must be a per-cabin object, e.g. {"economy_plus":30,"first":16}' });
             }
-            openSeats = total;
+            openSeats = {};
         }
-        openSeats = Number(openSeats);
-        if (isNaN(openSeats) || openSeats < 0) openSeats = 0;
-        openSeats = Math.floor(openSeats);
+        var cabinCount = 0;
+        var cleaned = {};
+        for (var cabin in openSeats) {
+            var n = Number(openSeats[cabin]);
+            if (!isNaN(n) && n > 0) { cleaned[cabin] = Math.floor(n); cabinCount++; }
+        }
+        if (cabinCount === 0) {
+            return res.status(400).json({ ok: false, error: 'no open premium seats to draw for' });
+        }
 
         try {
             var result = await sb.rpc('run_upgrade_lottery', {
-                p_flight_id: b.flightId, p_open_seats: openSeats,
+                p_flight_id: b.flightId, p_open_seats: cleaned,
             });
             return res.json({ ok: true, result: result });
         } catch (err) { return fail(res, err, 'lottery'); }
