@@ -85,4 +85,32 @@ async function setGroupRank(groupId, userId, rankName) {
     }
 }
 
-module.exports = { usernameToUserId, userIdToUsername, setGroupRank, getGroupRoles };
+// Promote/demote by exact rank NUMBER (10, 20, ...). More robust than matching
+// a display name, since names may carry emoji/styling. Returns { ok, rank } or
+// { ok:false, reason, ... }.
+async function setGroupRankByNumber(groupId, userId, rankNumber) {
+    if (!ocKey()) return { ok: false, reason: 'not_configured' };
+    try {
+        var roles = await getGroupRoles(groupId);
+        var target = roles.find(function (r) { return Number(r.rank) === Number(rankNumber); });
+        if (!target) {
+            return { ok: false, reason: 'unknown_rank', roles: roles.map(function (r) { return r.rank; }) };
+        }
+        var membership = await getMembership(groupId, userId);
+        if (!membership) return { ok: false, reason: 'not_in_group' };
+
+        var res = await fetch(OPENCLOUD + '/' + membership.path, {
+            method: 'PATCH',
+            headers: { 'x-api-key': ocKey(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role: target.path }),
+        });
+        if (res.ok) return { ok: true, rank: target.displayName, rankNumber: target.rank };
+        var detail = await res.text();
+        return { ok: false, reason: 'api_error', status: res.status, detail: detail };
+    } catch (err) {
+        console.error('[Roblox] setGroupRankByNumber:', err);
+        return { ok: false, reason: 'error' };
+    }
+}
+
+module.exports = { usernameToUserId, userIdToUsername, setGroupRank, setGroupRankByNumber, getGroupRoles };
