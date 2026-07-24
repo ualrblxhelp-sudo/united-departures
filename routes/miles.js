@@ -223,9 +223,56 @@ function setupMilesRoute(app, client) {
             var who = await resolveUser(b);
             if (!who) return res.status(404).json({ ok: false, error: 'Roblox user not found' });
             await sb.rpc('set_status', { p_user_id: who.userId, p_status: b.status });
+
+            // Keep the group rank locked to the tier: a miles promotion or
+            // demotion here also moves the member in the Roblox group, so the
+            // two never drift. 'general' has no group rank, so it's skipped.
+            // Best-effort: a ranking failure (e.g. Open Cloud key not set, or
+            // the target outranks the key) does NOT fail the status change.
+            var TIER_RANK = { silver: 10, gold: 20, platinum: 25, '1k': 30, gs: 40 };
+            var rankSync = null;
+            if (TIER_RANK[b.status] != null && !b.skipGroupRank) {
+                var groupId = Number(process.env.MILES_GROUP_ID || 15667508);
+                rankSync = await roblox.setGroupRankByNumber(groupId, who.userId, TIER_RANK[b.status]);
+                if (!rankSync.ok) {
+                    console.warn('[Miles API] status-set group re-rank skipped:', rankSync.reason || rankSync);
+                }
+            }
+
             var status = await sb.rpc('get_member_status', { p_user_id: who.userId });
-            return res.json({ ok: true, status: status });
+            return res.json({ ok: true, status: status, rankSync: rankSync });
         } catch (err) { return fail(res, err, 'status-set'); }
+    });
+
+    // ---- WRITE: seed status as a FLOOR from a Roblox group rank -------------
+    // Option A: the group rank guarantees AT LEAST this tier, but flying can
+    // raise you higher. We only ever RAISE to meet the floor -- never lower a
+    // member who has out-flown their group rank. Idempotent: safe to call on
+    // every join.
+    app.post('/api/miles/status-floor', async function (req, res) {
+        if (!keyOk(req, res)) return; if (!sbOk(res)) return;
+        var b = req.body || {};
+        if (STATUSES.indexOf(b.status) === -1) return res.status(400).json({ ok: false, error: 'invalid status' });
+        try {
+            var who = await resolveUser(b);
+            if (!who) return res.status(404).json({ ok: false, error: 'Roblox user not found' });
+
+            var current = await sb.rpc('get_member_status', { p_user_id: who.userId });
+            var currentStatus = (current && current.status) ? current.status : 'general';
+
+            // STATUSES is ordered low->high, so index is the tier rank.
+            var floorRank = STATUSES.indexOf(b.status);
+            var curRank = STATUSES.indexOf(currentStatus);
+            if (curRank === -1) curRank = 0;
+
+            var changed = false;
+            if (floorRank > curRank) {
+                await sb.rpc('set_status', { p_user_id: who.userId, p_status: b.status });
+                current = await sb.rpc('get_member_status', { p_user_id: who.userId });
+                changed = true;
+            }
+            return res.json({ ok: true, changed: changed, status: current });
+        } catch (err) { return fail(res, err, 'status-floor'); }
     });
 
     // ---- WRITE: card grant (gamepass ownership sync; one-time idempotent) ---
