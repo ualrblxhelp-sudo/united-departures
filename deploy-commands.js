@@ -25,7 +25,7 @@ const rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
 
         const globalCommands = ['mymiles', 'addmiles', 'removemiles', 'rankupmiles'];
         const publicCommands = ['bugreport'];
-        const aviateCommands = ['traininglog', 'attendance'];
+        const aviateCommands = ['traininglog', 'attendance', 'commencetraining'];
 
         const volareGuildCommands = allCommands.filter(function(command) {
             return globalCommands.indexOf(command.name) === -1 && aviateCommands.indexOf(command.name) === -1;
