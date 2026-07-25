@@ -1,5 +1,6 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const TraineeProfile = require('../models/TraineeProfile');
+const TrainingAssignment = require('../models/TrainingAssignment');
 const ids = require('../config/ids');
 
 var TRAINING_TYPES = [
@@ -45,6 +46,20 @@ module.exports = {
         var target = interaction.options.getUser('users', true);
         var trainingType = interaction.options.getString('trainingtype', true);
 
+        // Close-out link with /commencetraining: if this trainee has an ACTIVE
+        // assignment for this department, only their assigned instructor (or a
+        // server admin) may log it. The most recent record for the pair is used.
+        var assignment = await TrainingAssignment
+            .findOne({ studentId: target.id, department: trainingType })
+            .sort({ assignedAt: -1 });
+
+        var isAdmin = interaction.memberPermissions && interaction.memberPermissions.has(PermissionFlagsBits.Administrator);
+        if (assignment && assignment.status === 'active' && assignment.instructorId !== interaction.user.id && !isAdmin) {
+            return interaction.editReply({
+                content: 'This trainee is assigned to <@' + assignment.instructorId + '> for **' + trainingLabel(trainingType) + '**. Only their assigned instructor (or an admin) can log this training.',
+            });
+        }
+
         var profile = await TraineeProfile.findOne({ discordId: target.id });
         if (!profile) {
             profile = new TraineeProfile({
@@ -71,6 +86,31 @@ module.exports = {
         profile.completedTrainings = completed;
         await profile.save();
 
+        // Sync the assignment + the in-training role.
+        var roleNote = '';
+        if (assignment) {
+            var member = await interaction.guild.members.fetch(target.id).catch(function() { return null; });
+            if (action === 'completed' && assignment.status === 'active') {
+                assignment.status = 'completed';
+                assignment.completedAt = new Date();
+                await assignment.save();
+                if (member) {
+                    var removed = await member.roles.remove(ids.TRAINING_INTRAINING_ROLE_ID)
+                        .then(function() { return true; })
+                        .catch(function() { return false; });
+                    if (!removed) roleNote = '\n(Note: could not remove the in-training role \u2014 check the bot\'s role position.)';
+                }
+            } else if (action === 'incomplete' && assignment.status === 'completed') {
+                // Undo a completion: reopen the assignment and restore the role.
+                assignment.status = 'active';
+                assignment.completedAt = null;
+                await assignment.save();
+                if (member) {
+                    await member.roles.add(ids.TRAINING_INTRAINING_ROLE_ID).catch(function() {});
+                }
+            }
+        }
+
         var embed = new EmbedBuilder()
             .setColor(action === 'completed' ? 0x2EB860 : 0xD64545)
             .setTitle('Training Log Updated')
@@ -81,7 +121,7 @@ module.exports = {
                 '**Logged by:** <@' + interaction.user.id + '>'
             )
             .setTimestamp()
-            .setFooter({ text: 'United Aviate • Training Log' });
+            .setFooter({ text: 'United Aviate \u2022 Training Log' });
 
         var channel = await logChannel(interaction.client);
         if (channel && typeof channel.send === 'function') {
@@ -93,7 +133,7 @@ module.exports = {
         }
 
         return interaction.editReply({
-            content: 'Training log updated for <@' + target.id + '>: **' + trainingLabel(trainingType) + '** is now **' + action + '**.',
+            content: 'Training log updated for <@' + target.id + '>: **' + trainingLabel(trainingType) + '** is now **' + action + '**.' + roleNote,
         });
     },
 };
