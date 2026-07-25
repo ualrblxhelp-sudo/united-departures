@@ -28,4 +28,17 @@ module.exports = {
     ATTENDANCE_CHANNEL_ID: process.env.ATTENDANCE_CHANNEL_ID || '1528980853336572085',
     // Minimum Roblox group rank counted as "on duty" for attendance.
     ATTENDANCE_MIN_RANK: parseInt(process.env.ATTENDANCE_MIN_RANK || '50', 10),
+
+    // ---- United Aviate training ----
+    // TRAINING_STAFF_ROLE_ID (above) is the INSTRUCTOR role. Instructors hold it
+    // PLUS their department role; students hold only their department role.
+    // Role placed on a STUDENT while they're assigned to be trained. Removed
+    // automatically when their instructor logs completion via /traininglog.
+    TRAINING_INTRAINING_ROLE_ID: process.env.TRAINING_INTRAINING_ROLE_ID || '1464736853163774034',
+    // Department roles, keyed to match the /traininglog training types.
+    DEPARTMENT_ROLES: {
+        'customer-service': process.env.DEPT_CUSTOMER_SERVICE_ROLE_ID || '1309634117440241684',
+        'ramp-services': process.env.DEPT_RAMP_SERVICES_ROLE_ID || '1309634118404931616',
+        'flight-crew': process.env.DEPT_FLIGHT_CREW_ROLE_ID || '1402230313567916095',
+    },
 };
