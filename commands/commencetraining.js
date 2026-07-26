@@ -30,36 +30,34 @@ async function safeDM(member, payload) {
     }
 }
 
-function instructorDM(student, deptLabel) {
-    return {
-        embeds: [new EmbedBuilder()
-            .setColor(ids.EMBED_COLOR)
-            .setTitle('New Trainee Assigned')
-            .setDescription(
-                'You have been assigned a student to train in **' + deptLabel + '**.\n\n' +
-                '**Student:** ' + student.user.username + ' (<@' + student.id + '>)\n\n' +
-                'When you have finished training them, confirm it with `/traininglog` \u2014 set ' +
-                '**users** to your student and **trainingtype** to ' + deptLabel + '. ' +
-                'That closes out the assignment and removes their in-training role.'
-            )
-            .setTimestamp()
-            .setFooter({ text: 'United Aviate \u2022 Training' })],
-    };
+// ---- DM copy (message content, not embeds -- headings/subtext/blockquotes) ----
+
+function studentMessage(instructor) {
+    return `-# _ _
+> ### <:uaaviate_staff:1465428477132935251>**Stage 2: Instructional Training**
+-# **Training Assignment** — The Presidency
+
+> Firstly, congratulations on passing your orientation exam. We are delighted to see your progress through the Aviate Academy with such brightness. At Stage 2, you will go through a **hands-on** training session at our hub in Chicago and Newark. You will learn about the items, tasks, and controls necessary to become a successful employee at United Airlines.You will now be **assigned** **an instructor, who will lead your growth and training curriculum for your program in the United Aviate Academy.**
+
+<:uaaviate_info:1465428271637201034> If you would like to request a training session, please contact your **trainer**, <@${instructor.id}>, or **@**${instructor.user.username}. Please direct message them, as they most likely will not respond to you if you contact them in this server. Additionally, if an Instructor remains **ignorant** to your requests, please contact an executive with your complaints.
+
+<:uaaviate_staff:1465428477132935251> **Charles L.**
+> -# President, United Airlines`;
 }
 
-function studentDM(instructor, deptLabel) {
-    return {
-        embeds: [new EmbedBuilder()
-            .setColor(ids.EMBED_COLOR)
-            .setTitle('Your Training Instructor')
-            .setDescription(
-                'You have been selected for **' + deptLabel + '** training.\n\n' +
-                '**Instructor:** ' + instructor.user.username + ' (<@' + instructor.id + '>)\n\n' +
-                'They will reach out to begin your training.'
-            )
-            .setTimestamp()
-            .setFooter({ text: 'United Aviate \u2022 Training' })],
-    };
+function instructorMessage(students) {
+    var list = students.map(function(st) { return '> - <@' + st.id + '>'; }).join('\n');
+    return `-# _ _
+> ### <:uaaviate_staff:1465428477132935251>**Instructional Training Assignment**
+-# **Training Assignment** — The Presidency
+
+> Hello, Instructor! Due to the new hiring batch of students, you will be assigned to **train** an individual, or multiple individuals depending on your luck. Please instruct them with regards to our **training guidelines** and instruct them with **discipline, quality, and kindness**. For every session you commence and train an individual, please **log** it using the **/attendance** command in the Aviate Server. Once you are done training your trainee and your student has graduated, please use the **/traininglog** command to indicate the **user** who has graduated. This will log the user who graduated in our database.
+
+<:ua_1:1331079891193696331> Your trainee list is listed below, please contact them as soon as possible.
+${list}
+
+<:uaaviate_staff:1465428477132935251> **Charles L.**
+> -# President, United Airlines`;
 }
 
 module.exports = {
@@ -82,7 +80,6 @@ module.exports = {
         var instructorRoleId = ids.TRAINING_STAFF_ROLE_ID;
         var inTrainingRoleId = ids.TRAINING_INTRAINING_ROLE_ID;
 
-        // Need the full member list to find instructors and students.
         try {
             await guild.members.fetch();
         } catch (err) {
@@ -111,10 +108,11 @@ module.exports = {
         }
 
         var assignedThisRun = {};
-        var results = [];             // { deptLabel, student, instructor, roleOk }
+        var allAssignments = [];      // { student, instructor, deptLabel, roleOk }
+        var byInstructor = {};        // instructorId -> { instructor, students: [] }
         var skippedNoInstructor = []; // { deptLabel, count }
-        var dmNotes = [];
 
+        // ---- 1) Match students to instructors, assign role + save record ----
         for (var d = 0; d < DEPARTMENTS.length; d++) {
             var dept = DEPARTMENTS[d];
             var deptRoleId = ids.DEPARTMENT_ROLES[dept.key];
@@ -131,12 +129,11 @@ module.exports = {
                     instructors.push(member);
                     return;
                 }
-                // Student candidate filters.
-                if (member.roles.cache.has(inTrainingRoleId)) return;   // already mid-training
-                if (alreadyAssigned[member.id]) return;                  // has an active assignment
-                if (assignedThisRun[member.id]) return;                  // assigned earlier this run
+                if (member.roles.cache.has(inTrainingRoleId)) return; // already mid-training
+                if (alreadyAssigned[member.id]) return;                // has an active assignment
+                if (assignedThisRun[member.id]) return;                // assigned earlier this run
                 var done = completedByUser[member.id] || [];
-                if (done.indexOf(dept.key) !== -1) return;               // already completed this dept
+                if (done.indexOf(dept.key) !== -1) return;             // already completed this dept
                 students.push(member);
             });
 
@@ -151,11 +148,9 @@ module.exports = {
 
             for (var s = 0; s < shuffledStudents.length; s++) {
                 var student = shuffledStudents[s];
-                // Round-robin over shuffled instructors -> even spread, still random.
-                var instructor = shuffledInstructors[s % shuffledInstructors.length];
+                var instructor = shuffledInstructors[s % shuffledInstructors.length]; // even, random spread
                 assignedThisRun[student.id] = true;
 
-                // 1) In-training role.
                 var roleOk = true;
                 try {
                     await student.roles.add(inTrainingRoleId, 'Assigned for ' + dept.label + ' training');
@@ -164,7 +159,6 @@ module.exports = {
                     console.error('[CommenceTraining] role add failed for', student.id, err);
                 }
 
-                // 2) Persist the assignment.
                 try {
                     await TrainingAssignment.create({
                         studentId: student.id,
@@ -178,54 +172,84 @@ module.exports = {
                     console.error('[CommenceTraining] assignment save failed:', err);
                 }
 
-                // 3) DM both sides; cross-notify if one has DMs closed.
-                var instructorOk = await safeDM(instructor, instructorDM(student, dept.label));
-                var studentOk = await safeDM(student, studentDM(instructor, dept.label));
-
-                if (!studentOk) {
-                    await safeDM(instructor, 'Heads up: your assigned student **' + student.user.username +
-                        '** (<@' + student.id + '>) has DMs closed \u2014 please reach out to them directly.');
-                    dmNotes.push('Student <@' + student.id + '> has DMs closed (instructor <@' + instructor.id + '> notified).');
+                allAssignments.push({ student: student, instructor: instructor, deptLabel: dept.label, roleOk: roleOk });
+                if (!byInstructor[instructor.id]) {
+                    byInstructor[instructor.id] = { instructor: instructor, students: [] };
                 }
-                if (!instructorOk) {
-                    await safeDM(student, 'Heads up: your assigned instructor **' + instructor.user.username +
-                        '** (<@' + instructor.id + '>) has DMs closed \u2014 please reach out to them directly.');
-                    dmNotes.push('Instructor <@' + instructor.id + '> has DMs closed (student <@' + student.id + '> notified).');
-                }
-
-                results.push({ deptLabel: dept.label, student: student, instructor: instructor, roleOk: roleOk });
+                byInstructor[instructor.id].students.push(student);
             }
         }
 
-        if (results.length === 0 && skippedNoInstructor.length === 0) {
+        if (allAssignments.length === 0 && skippedNoInstructor.length === 0) {
             return interaction.editReply({ content: 'No eligible students were found to assign.' });
         }
 
+        // ---- 2) DM students (one each), then instructors (one grouped each) ----
+        var studentDMFailed = {};
+        for (var i = 0; i < allAssignments.length; i++) {
+            var a = allAssignments[i];
+            var ok = await safeDM(a.student, { content: studentMessage(a.instructor) });
+            if (!ok) studentDMFailed[a.student.id] = true;
+        }
+
+        var instructorDMFailed = {};
+        var instructorIds = Object.keys(byInstructor);
+        for (var g = 0; g < instructorIds.length; g++) {
+            var grp = byInstructor[instructorIds[g]];
+            var okI = await safeDM(grp.instructor, { content: instructorMessage(grp.students) });
+            if (!okI) instructorDMFailed[grp.instructor.id] = true;
+        }
+
+        // ---- 3) Cross-notify closed DMs (best effort) ----
+        for (var gi = 0; gi < instructorIds.length; gi++) {
+            var grp2 = byInstructor[instructorIds[gi]];
+            if (instructorDMFailed[grp2.instructor.id]) {
+                for (var st = 0; st < grp2.students.length; st++) {
+                    await safeDM(grp2.students[st], 'Heads up: your assigned instructor **' + grp2.instructor.user.username +
+                        '** (<@' + grp2.instructor.id + '>) has DMs closed — please reach out to them directly.');
+                }
+            }
+        }
+        for (var ai = 0; ai < allAssignments.length; ai++) {
+            var a2 = allAssignments[ai];
+            if (studentDMFailed[a2.student.id] && !instructorDMFailed[a2.instructor.id]) {
+                await safeDM(a2.instructor, 'Heads up: your assigned trainee **' + a2.student.user.username +
+                    '** (<@' + a2.student.id + '>) has DMs closed — please reach out to them directly.');
+            }
+        }
+
+        // ---- 4) Admin summary ----
         var lines = [];
-        var byDept = {};
-        results.forEach(function(r) {
-            (byDept[r.deptLabel] = byDept[r.deptLabel] || []).push(r);
-        });
-        Object.keys(byDept).forEach(function(deptLabel) {
-            lines.push('**' + deptLabel + '** \u2014 ' + byDept[deptLabel].length + ' assigned');
-            byDept[deptLabel].forEach(function(r) {
-                lines.push('\u2022 <@' + r.student.id + '> \u2192 <@' + r.instructor.id + '>' + (r.roleOk ? '' : ' \u26a0\ufe0f role not added'));
+        instructorIds.forEach(function(iid) {
+            var grp3 = byInstructor[iid];
+            lines.push('**<@' + grp3.instructor.id + '>** — ' + grp3.students.length + ' trainee(s)');
+            grp3.students.forEach(function(stM) {
+                lines.push('\u2022 <@' + stM.id + '>');
             });
         });
+
+        var roleFails = allAssignments.filter(function(x) { return !x.roleOk; });
+        if (roleFails.length) {
+            lines.push('\u26a0\ufe0f In-training role not added to: ' + roleFails.map(function(x) { return '<@' + x.student.id + '>'; }).join(', '));
+        }
         skippedNoInstructor.forEach(function(sk) {
-            lines.push('\u23ed\ufe0f **' + sk.deptLabel + '** \u2014 skipped ' + sk.count + ' student(s), no available instructor');
+            lines.push('\u23ed\ufe0f **' + sk.deptLabel + '** — skipped ' + sk.count + ' student(s), no available instructor');
         });
-        if (dmNotes.length) {
+
+        var closedStudents = Object.keys(studentDMFailed);
+        var closedInstructors = Object.keys(instructorDMFailed);
+        if (closedStudents.length || closedInstructors.length) {
             lines.push('');
             lines.push('**DM issues:**');
-            dmNotes.forEach(function(n) { lines.push('\u2022 ' + n); });
+            closedStudents.forEach(function(id) { lines.push('\u2022 Student <@' + id + '> has DMs closed'); });
+            closedInstructors.forEach(function(id) { lines.push('\u2022 Instructor <@' + id + '> has DMs closed'); });
         }
 
         var summary = new EmbedBuilder()
             .setColor(ids.EMBED_COLOR)
             .setTitle('Training Commenced')
             .setDescription(lines.join('\n').slice(0, 4000))
-            .setFooter({ text: 'United Aviate \u2022 ' + results.length + ' assignment(s)' })
+            .setFooter({ text: 'United Aviate \u2022 ' + allAssignments.length + ' assignment(s)' })
             .setTimestamp();
 
         return interaction.editReply({ embeds: [summary] });
