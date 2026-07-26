@@ -73,7 +73,6 @@ module.exports = {
 
         var guild = interaction.guild;
         var instructorRoleId = ids.TRAINING_STAFF_ROLE_ID;
-        var inTrainingRoleId = ids.TRAINING_INTRAINING_ROLE_ID;
 
         try {
             await guild.members.fetch();
@@ -103,7 +102,7 @@ module.exports = {
         }
 
         var assignedThisRun = {};
-        var allAssignments = [];      // { student, instructor, deptLabel, roleOk }
+        var allAssignments = [];      // { student, instructor, deptLabel }
         var byInstructor = {};        // instructorId -> { instructor, students: [] }
         var skippedNoInstructor = []; // { deptLabel, count }
 
@@ -124,7 +123,6 @@ module.exports = {
                     instructors.push(member);
                     return;
                 }
-                if (member.roles.cache.has(inTrainingRoleId)) return; // already mid-training
                 if (alreadyAssigned[member.id]) return;                // has an active assignment
                 if (assignedThisRun[member.id]) return;                // assigned earlier this run
                 var done = completedByUser[member.id] || [];
@@ -146,14 +144,6 @@ module.exports = {
                 var instructor = shuffledInstructors[s % shuffledInstructors.length]; // even, random spread
                 assignedThisRun[student.id] = true;
 
-                var roleOk = true;
-                try {
-                    await student.roles.add(inTrainingRoleId, 'Assigned for ' + dept.label + ' training');
-                } catch (err) {
-                    roleOk = false;
-                    console.error('[CommenceTraining] role add failed for', student.id, err);
-                }
-
                 try {
                     await TrainingAssignment.create({
                         studentId: student.id,
@@ -167,7 +157,7 @@ module.exports = {
                     console.error('[CommenceTraining] assignment save failed:', err);
                 }
 
-                allAssignments.push({ student: student, instructor: instructor, deptLabel: dept.label, roleOk: roleOk });
+                allAssignments.push({ student: student, instructor: instructor, deptLabel: dept.label });
                 if (!byInstructor[instructor.id]) {
                     byInstructor[instructor.id] = { instructor: instructor, students: [] };
                 }
@@ -223,10 +213,6 @@ module.exports = {
             });
         });
 
-        var roleFails = allAssignments.filter(function(x) { return !x.roleOk; });
-        if (roleFails.length) {
-            lines.push('\u26a0\ufe0f In-training role not added to: ' + roleFails.map(function(x) { return '<@' + x.student.id + '>'; }).join(', '));
-        }
         skippedNoInstructor.forEach(function(sk) {
             lines.push('\u23ed\ufe0f **' + sk.deptLabel + '** — skipped ' + sk.count + ' student(s), no available instructor');
         });
