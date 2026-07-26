@@ -155,7 +155,7 @@ client.once(Events.ClientReady, async function(c) {
         // bot is in (and in DMs). Anything listed here MUST be excluded from the
         // guild registrations below, or it will show up twice in that guild.
         var globalCommands = ['mymiles', 'addmiles', 'removemiles', 'rankupmiles'];
-        var aviateCommands = ['traininglog', 'attendance'];
+        var aviateCommands = ['training'];
 
         // --- Volare staff server: every command EXCEPT the global ones ---
         var cmds = [];
