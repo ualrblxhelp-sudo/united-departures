@@ -25,6 +25,8 @@ var STATUS_LABEL = {
     gs: 'Global Services',
 };
 
+var TIER_ORDER = { general: 0, silver: 1, gold: 2, platinum: 3, '1k': 4, gs: 5 };
+
 var CARD_LABEL = {
     gateway: 'MileagePlus Gateway',
     explorer: 'United Explorer',
@@ -88,10 +90,16 @@ module.exports = {
                 { name: 'PQF', value: fmt(status.pqf), inline: true },
                 { name: 'Card', value: cardLabel, inline: true }
             )
-            .setFooter({ text: 'United MileagePlus \u2022 Volare' });
+            .setFooter({ text: 'United MileagePlus \u2022 United Airlines' });
 
-        if (status.next_tier) {
-            var nt = status.next_tier;
+        var currentOrder = (TIER_ORDER[status.status] != null) ? TIER_ORDER[status.status] : -1;
+        var nt = status.next_tier;
+        var ntOrder = (nt && TIER_ORDER[nt.status] != null) ? TIER_ORDER[nt.status] : -1;
+
+        // Only show a "to reach" target that is genuinely ABOVE the member's
+        // current status. GS/1K have no higher auto tier, and this also guards
+        // the case where next_tier came back based on earned-vs-actual status.
+        if (nt && ntOrder > currentOrder) {
             var nextLabel = STATUS_LABEL[nt.status] || nt.status;
             var opt1 = fmt(nt.pqp_needed_only) + ' PQP';
             var opt2 = fmt(nt.pqp_needed_withpqf) + ' PQP + ' + fmt(nt.pqf_needed) + ' PQF';
