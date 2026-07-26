@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const engagement = require('../../utils/engagement');
 
 var VOLARE_GUILD_ID = '1309560657473179679';
@@ -13,7 +13,9 @@ module.exports = {
         if (interaction.guildId !== VOLARE_GUILD_ID) {
             return interaction.reply({ content: '<:e_decline:1397829342079483904> This command can only be used in the United Volare server.', ephemeral: true });
         }
-        if (!interaction.member.roles.cache.has(MANAGEMENT_ROLE_ID)) {
+        var canUse = interaction.member.permissions.has(PermissionFlagsBits.Administrator)
+            || interaction.member.roles.cache.has(MANAGEMENT_ROLE_ID);
+        if (!canUse) {
             return interaction.reply({ content: '<:e_decline:1397829342079483904> You do not have permission to use this command.', ephemeral: true });
         }
 
