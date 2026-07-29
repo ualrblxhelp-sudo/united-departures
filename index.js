@@ -12,6 +12,7 @@ const flightsApi = require('./routes/flights');
 const airportsApi = require('./routes/airports');
 const milesApi = require('./routes/miles');
 const milesCycle = require('./utils/milesCycle');
+const trainingPanel = require('./utils/trainingPanel');
 const ids = require('./config/ids');
 expressApp.use(express.json());
 
@@ -259,6 +260,15 @@ client.once(Events.ClientReady, async function(c) {
         newsroom.startNewsroomWatcher(client);
     } catch (err) {
         console.error('[Newsroom] Watcher start error:', err);
+    }
+
+    // Keep the Aviate training panel thread refreshed after bot restarts.
+    try {
+        trainingPanel.syncTrainingPanel(client).catch(function(err) {
+            console.error('[TrainingPanel] Startup sync error:', err);
+        });
+    } catch (err) {
+        console.error('[TrainingPanel] Startup sync start error:', err);
     }
 });
 
