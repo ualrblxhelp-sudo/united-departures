@@ -59,8 +59,8 @@ async function resolveUsers(client, guild, idsList) {
     return resolved;
 }
 
-async function logChannel(client) {
-    return client.channels.fetch(ids.TRAINING_LOG_CHANNEL_ID).catch(function() { return null; });
+async function logThread(client) {
+    return client.channels.fetch(ids.TRAINING_ATTENDANCE_THREAD_ID).catch(function() { return null; });
 }
 
 module.exports = {
@@ -101,15 +101,15 @@ module.exports = {
             .setTimestamp()
             .setFooter({ text: 'United Aviate • Training Attendance' });
 
-        var channel = await logChannel(interaction.client);
+        var channel = await logThread(interaction.client);
         var sent = null;
         if (channel && typeof channel.send === 'function') {
             sent = await channel.send({ embeds: [embed] }).catch(function(err) {
-                console.error('[AttendanceCommand] Channel send error:', err);
+                console.error('[AttendanceCommand] Thread send error:', err);
                 return null;
             });
         } else {
-            console.error('[AttendanceCommand] Log channel not reachable:', ids.TRAINING_LOG_CHANNEL_ID);
+            console.error('[AttendanceCommand] Attendance thread not reachable:', ids.TRAINING_ATTENDANCE_THREAD_ID);
         }
 
         await TrainingAttendanceLog.create({
@@ -117,7 +117,7 @@ module.exports = {
             hostId: interaction.user.id,
             hostUsername: interaction.user.username,
             attendees: attendees,
-            channelId: sent ? sent.channelId : ids.TRAINING_LOG_CHANNEL_ID,
+            channelId: sent ? sent.channelId : ids.TRAINING_ATTENDANCE_THREAD_ID,
             messageId: sent ? sent.id : null,
         });
 
