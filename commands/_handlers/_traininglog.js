@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('disc
 const TraineeProfile = require('../../models/TraineeProfile');
 const TrainingAssignment = require('../../models/TrainingAssignment');
 const ids = require('../../config/ids');
+const trainingPanel = require('../../utils/trainingPanel');
 
 var TRAINING_TYPES = [
     { name: 'customer-service', label: 'Customer Service' },
@@ -14,8 +15,8 @@ function trainingLabel(value) {
     return found ? found.label : value;
 }
 
-async function logChannel(client) {
-    return client.channels.fetch(ids.TRAINING_LOG_CHANNEL_ID).catch(function() { return null; });
+async function logThread(client) {
+    return client.channels.fetch(ids.TRAINING_COMPLETION_THREAD_ID).catch(function() { return null; });
 }
 
 module.exports = {
@@ -79,6 +80,8 @@ module.exports = {
             if (action === 'completed' && assignment.status === 'active') {
                 assignment.status = 'completed';
                 assignment.completedAt = new Date();
+                assignment.completedBy = interaction.user.id;
+                assignment.completedByUsername = interaction.user.username;
                 await assignment.save();
                 if (member) {
                     var removed = await member.roles.remove(ids.TRAINING_INTRAINING_ROLE_ID)
@@ -90,6 +93,8 @@ module.exports = {
                 // Undo a completion: reopen the assignment and restore the role.
                 assignment.status = 'active';
                 assignment.completedAt = null;
+                assignment.completedBy = null;
+                assignment.completedByUsername = '';
                 await assignment.save();
                 if (member) {
                     await member.roles.add(ids.TRAINING_INTRAINING_ROLE_ID).catch(function() {});
@@ -109,14 +114,18 @@ module.exports = {
             .setTimestamp()
             .setFooter({ text: 'United Aviate \u2022 Training Log' });
 
-        var channel = await logChannel(interaction.client);
-        if (channel && typeof channel.send === 'function') {
-            await channel.send({ embeds: [embed] }).catch(function(err) {
-                console.error('[TrainingLog] Channel send error:', err);
+        var thread = await logThread(interaction.client);
+        if (thread && typeof thread.send === 'function') {
+            await thread.send({ embeds: [embed] }).catch(function(err) {
+                console.error('[TrainingLog] Thread send error:', err);
             });
         } else {
-            console.error('[TrainingLog] Log channel not reachable:', ids.TRAINING_LOG_CHANNEL_ID);
+            console.error('[TrainingLog] Completion thread not reachable:', ids.TRAINING_COMPLETION_THREAD_ID);
         }
+
+        trainingPanel.syncTrainingPanel(interaction.client).catch(function (err) {
+            console.error('[TrainingLog] Panel sync error:', err);
+        });
 
         return interaction.editReply({
             content: 'Training log updated for <@' + target.id + '>: **' + trainingLabel(trainingType) + '** is now **' + action + '**.' + roleNote,
