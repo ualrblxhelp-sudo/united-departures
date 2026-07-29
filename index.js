@@ -101,6 +101,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (bid.indexOf('fp_') === 0) {
                 return await client.commands.get('flightpanel').handleButton(interaction);
             }
+            if (bid.indexOf('tp_') === 0) {
+                return await client.commands.get('training').handleButton(interaction);
+            }
             if (bid.startsWith('inactivity_approve_')) {
                 var userId = bid.replace('inactivity_approve_', '');
                 return await client.commands.get('inactivity').handleApprove(interaction, userId);
