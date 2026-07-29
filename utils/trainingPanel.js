@@ -1,10 +1,11 @@
-const { EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 const ids = require('../config/ids');
 const TrainingAssignment = require('../models/TrainingAssignment');
 const TraineeProfile = require('../models/TraineeProfile');
 
 var PANEL_TITLE = 'United Aviate — Training Panel';
 var PANEL_FOOTER = 'United Aviate • Training';
+var FIELDS_PER_PAGE = 4;
 
 var DEPT_LABEL = {
     'customer-service': 'Customer Service',
@@ -16,40 +17,60 @@ function deptLabel(key) {
     return DEPT_LABEL[key] || key;
 }
 
-// Embed field values cap at 1024 chars.
-function fieldValue(lines) {
-    if (lines.length === 0) return '—';
-    var text = lines.join('\n');
-    if (text.length <= 1024) return text;
-    var out = [];
+function chunkLines(lines, maxLen) {
+    var limit = maxLen || 1000;
+    var chunks = [];
+    var current = [];
     var len = 0;
+
     for (var i = 0; i < lines.length; i++) {
-        if (len + lines[i].length + 1 > 990) {
-            out.push('…and ' + (lines.length - i) + ' more');
-            break;
+        var line = lines[i];
+        var add = line.length + (current.length ? 1 : 0);
+        if (current.length && len + add > limit) {
+            chunks.push(current.join('\n'));
+            current = [line];
+            len = line.length;
+            continue;
         }
-        out.push(lines[i]);
-        len += lines[i].length + 1;
+        current.push(line);
+        len += add;
     }
-    return out.join('\n');
+
+    if (current.length) chunks.push(current.join('\n'));
+    return chunks;
 }
 
-async function buildTrainingPanelEmbed() {
+function buildSectionFields(name, lines) {
+    if (!lines.length) return [{ name: name, value: '—' }];
+    var chunks = chunkLines(lines, 1000);
+    return chunks.map(function (chunk, index) {
+        return {
+            name: index === 0 ? name : name + ' (cont. ' + (index + 1) + ')',
+            value: chunk,
+        };
+    });
+}
+
+async function loadTrainingPanelData() {
     var active = await TrainingAssignment.find({ status: 'active' }).sort({ assignedAt: 1 }).lean().catch(function () { return []; });
     var completed = await TrainingAssignment.find({ status: 'completed' }).sort({ completedAt: -1 }).limit(40).lean().catch(function () { return []; });
     var profiles = await TraineeProfile.find({ completedTrainings: { $exists: true, $ne: [] } }).lean().catch(function () { return []; });
 
-    var embed = new EmbedBuilder()
-        .setColor(ids.EMBED_COLOR)
-        .setTitle(PANEL_TITLE)
-        .setTimestamp()
-        .setFooter({ text: PANEL_FOOTER });
+    return {
+        active: active,
+        completed: completed,
+        profiles: profiles,
+    };
+}
 
-    if (active.length === 0) {
-        embed.addFields({ name: 'Active Assignments', value: 'None right now.' });
+function buildTrainingPanelFields(data) {
+    var fields = [];
+
+    if (data.active.length === 0) {
+        fields.push({ name: 'Active Assignments', value: 'None right now.' });
     } else {
         var byInstructor = {};
-        active.forEach(function (a) {
+        data.active.forEach(function (a) {
             (byInstructor[a.instructorId] = byInstructor[a.instructorId] || []).push(a);
         });
         var lines = [];
@@ -59,29 +80,91 @@ async function buildTrainingPanelEmbed() {
                 lines.push('\u2022 <@' + a.studentId + '> — ' + deptLabel(a.department));
             });
         });
-        embed.addFields({ name: 'Active Assignments (' + active.length + ')', value: fieldValue(lines) });
+        fields = fields.concat(buildSectionFields('Active Assignments (' + data.active.length + ')', lines));
     }
 
-    if (completed.length) {
-        var clines = completed.map(function (a) {
+    if (data.completed.length) {
+        var clines = data.completed.map(function (a) {
             return '\u2022 <@' + a.studentId + '> — ' + deptLabel(a.department) + ' (logged by <@' + (a.completedBy || a.instructorId) + '>)';
         });
-        embed.addFields({ name: 'Recently Completed (' + completed.length + ')', value: fieldValue(clines) });
+        fields = fields.concat(buildSectionFields('Recently Completed (' + data.completed.length + ')', clines));
     }
 
-    if (profiles.length) {
-        var plines = profiles.map(function (p) {
+    if (data.profiles.length) {
+        var plines = data.profiles.map(function (p) {
             var done = (p.completedTrainings || []).map(deptLabel).join(', ');
             return '\u2022 <@' + p.discordId + '> — ' + done;
         });
-        embed.addFields({ name: 'Trainees with Completed Training (' + profiles.length + ')', value: fieldValue(plines) });
+        fields = fields.concat(buildSectionFields('Trainees with Completed Training (' + data.profiles.length + ')', plines));
     }
 
-    if (active.length === 0 && completed.length === 0 && profiles.length === 0) {
+    return fields;
+}
+
+function buildPanelDescription(data) {
+    return [
+        '**Active assignments:** ' + data.active.length,
+        '**Recently completed:** ' + data.completed.length,
+        '**Profiles with completed training:** ' + data.profiles.length,
+    ].join('\n');
+}
+
+function parseCurrentPage(message) {
+    if (!message || !Array.isArray(message.embeds) || !message.embeds.length) return 1;
+    var footer = message.embeds[0] && message.embeds[0].footer ? message.embeds[0].footer.text : '';
+    var match = String(footer || '').match(/Page (\d+) of (\d+)/);
+    return match ? Number(match[1]) || 1 : 1;
+}
+
+function buildComponents(page, totalPages) {
+    return [
+        new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('tp_page_' + Math.max(1, page - 1))
+                .setLabel('Previous')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(page <= 1),
+            new ButtonBuilder()
+                .setCustomId('tp_info')
+                .setLabel('Page ' + page + '/' + totalPages)
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(true),
+            new ButtonBuilder()
+                .setCustomId('tp_page_' + Math.min(totalPages, page + 1))
+                .setLabel('Next')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(page >= totalPages)
+        ),
+    ];
+}
+
+async function buildTrainingPanelView(page) {
+    var data = await loadTrainingPanelData();
+    var fields = buildTrainingPanelFields(data);
+    var totalPages = Math.max(1, Math.ceil(fields.length / FIELDS_PER_PAGE));
+    var safePage = Math.min(Math.max(1, Number(page) || 1), totalPages);
+    var start = (safePage - 1) * FIELDS_PER_PAGE;
+    var pageFields = fields.slice(start, start + FIELDS_PER_PAGE);
+
+    var embed = new EmbedBuilder()
+        .setColor(ids.EMBED_COLOR)
+        .setTitle(PANEL_TITLE)
+        .setDescription(buildPanelDescription(data))
+        .setTimestamp()
+        .setFooter({ text: PANEL_FOOTER + ' • Page ' + safePage + ' of ' + totalPages });
+
+    if (pageFields.length) embed.addFields(pageFields);
+
+    if (data.active.length === 0 && data.completed.length === 0 && data.profiles.length === 0) {
         embed.setDescription('No training data yet — no active assignments and nothing logged as complete.');
     }
 
-    return embed;
+    return {
+        embed: embed,
+        components: buildComponents(safePage, totalPages),
+        page: safePage,
+        totalPages: totalPages,
+    };
 }
 
 function isPanelMessage(message) {
@@ -115,19 +198,21 @@ async function syncTrainingPanel(client) {
         return null;
     }
 
-    var embed = await buildTrainingPanelEmbed();
     var message = await findPanelMessage(thread);
+    var currentPage = parseCurrentPage(message);
+    var view = await buildTrainingPanelView(currentPage);
     if (message) {
-        await message.edit({ embeds: [embed] });
+        await message.edit({ embeds: [view.embed], components: view.components });
         return message;
     }
 
-    var sent = await thread.send({ embeds: [embed] });
+    var sent = await thread.send({ embeds: [view.embed], components: view.components });
     await sent.pin().catch(function () {});
     return sent;
 }
 
 module.exports = {
-    buildTrainingPanelEmbed,
+    buildTrainingPanelView,
+    parseCurrentPage,
     syncTrainingPanel,
 };
