@@ -29,7 +29,7 @@ module.exports = {
             return interaction.deferUpdate();
         }
 
-        var match = interaction.customId.match(/^tp_page_(\d+)$/);
+        var match = interaction.customId.match(/^tp_(?:prev|next)_(\d+)$/);
         if (!match) return;
 
         var requestedPage = Number(match[1]) || 1;
