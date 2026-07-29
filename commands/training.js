@@ -64,4 +64,6 @@ module.exports = {
         if (sub === 'panel') return panel.execute(interaction);
         return interaction.reply({ content: 'Unknown subcommand.', ephemeral: true });
     },
+
+    handleButton: panel.handleButton,
 };
