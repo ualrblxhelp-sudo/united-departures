@@ -16,6 +16,8 @@ var TrainingAssignmentSchema = new mongoose.Schema({
     status: { type: String, default: 'active', enum: ['active', 'completed'] },
     assignedAt: { type: Date, default: Date.now },
     completedAt: { type: Date, default: null },
+    completedBy: { type: String, default: null },
+    completedByUsername: { type: String, default: '' },
 });
 
 TrainingAssignmentSchema.index({ studentId: 1, status: 1 });
