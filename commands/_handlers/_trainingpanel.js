@@ -13,10 +13,27 @@ module.exports = {
 
         await interaction.deferReply();
 
-        var embed = await trainingPanel.buildTrainingPanelEmbed();
+        var view = await trainingPanel.buildTrainingPanelView(1);
         trainingPanel.syncTrainingPanel(interaction.client).catch(function (err) {
             console.error('[TrainingPanel] Thread sync error:', err);
         });
-        return interaction.editReply({ embeds: [embed] });
+        return interaction.editReply({ embeds: [view.embed], components: view.components });
+    },
+
+    async handleButton(interaction) {
+        if (interaction.guildId !== ids.AVIATE_SERVER_ID) {
+            return interaction.reply({ content: 'This button can only be used in the United Aviate server.', ephemeral: true });
+        }
+
+        if (interaction.customId === 'tp_info') {
+            return interaction.deferUpdate();
+        }
+
+        var match = interaction.customId.match(/^tp_page_(\d+)$/);
+        if (!match) return;
+
+        var requestedPage = Number(match[1]) || 1;
+        var view = await trainingPanel.buildTrainingPanelView(requestedPage);
+        return interaction.update({ embeds: [view.embed], components: view.components });
     },
 };
