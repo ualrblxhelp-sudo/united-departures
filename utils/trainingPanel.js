@@ -177,7 +177,7 @@ function isPanelMessage(message) {
 }
 
 async function findPanelMessage(thread) {
-    var pinned = await thread.messages.fetchPinned().catch(function () { return null; });
+    var pinned = await thread.messages.fetchPins().catch(function () { return null; });
     if (pinned) {
         var pinnedMatch = pinned.find(isPanelMessage);
         if (pinnedMatch) return pinnedMatch;
