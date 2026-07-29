@@ -117,10 +117,12 @@ function parseCurrentPage(message) {
 }
 
 function buildComponents(page, totalPages) {
+    var prevPage = Math.max(1, page - 1);
+    var nextPage = Math.min(totalPages, page + 1);
     return [
         new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId('tp_page_' + Math.max(1, page - 1))
+                .setCustomId('tp_prev_' + prevPage)
                 .setLabel('Previous')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page <= 1),
@@ -130,7 +132,7 @@ function buildComponents(page, totalPages) {
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(true),
             new ButtonBuilder()
-                .setCustomId('tp_page_' + Math.min(totalPages, page + 1))
+                .setCustomId('tp_next_' + nextPage)
                 .setLabel('Next')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page >= totalPages)
