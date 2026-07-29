@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('disc
 const ids = require('../../config/ids');
 const TraineeProfile = require('../../models/TraineeProfile');
 const TrainingAssignment = require('../../models/TrainingAssignment');
+const trainingPanel = require('../../utils/trainingPanel');
 
 // Departments line up with the /traininglog training types and DEPARTMENT_ROLES.
 var DEPARTMENTS = [
@@ -232,6 +233,10 @@ module.exports = {
             .setDescription(lines.join('\n').slice(0, 4000))
             .setFooter({ text: 'United Aviate \u2022 ' + allAssignments.length + ' assignment(s)' })
             .setTimestamp();
+
+        trainingPanel.syncTrainingPanel(interaction.client).catch(function (err) {
+            console.error('[CommenceTraining] Panel sync error:', err);
+        });
 
         return interaction.editReply({ embeds: [summary] });
     },
