@@ -176,16 +176,38 @@ function isPanelMessage(message) {
     return embed && embed.title === PANEL_TITLE;
 }
 
+function findFirstMessage(source, predicate) {
+    if (!source) return null;
+    if (typeof source.find === 'function') {
+        return source.find(predicate) || null;
+    }
+    if (Array.isArray(source)) {
+        for (var i = 0; i < source.length; i++) {
+            if (predicate(source[i])) return source[i];
+        }
+        return null;
+    }
+    if (typeof source.values === 'function') {
+        var iter = source.values();
+        var next = iter.next();
+        while (!next.done) {
+            if (predicate(next.value)) return next.value;
+            next = iter.next();
+        }
+    }
+    return null;
+}
+
 async function findPanelMessage(thread) {
     var pinned = await thread.messages.fetchPins().catch(function () { return null; });
     if (pinned) {
-        var pinnedMatch = pinned.find(isPanelMessage);
+        var pinnedMatch = findFirstMessage(pinned, isPanelMessage);
         if (pinnedMatch) return pinnedMatch;
     }
 
     var recent = await thread.messages.fetch({ limit: 100 }).catch(function () { return null; });
     if (!recent) return null;
-    return recent.find(isPanelMessage) || null;
+    return findFirstMessage(recent, isPanelMessage);
 }
 
 async function resolvePanelThread(client) {
