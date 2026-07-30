@@ -1,8 +1,9 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const points = require('../../utils/points');
+const permissions = require('../../services/permissions');
 
 var VOLARE_GUILD_ID = '1309560657473179679';
-var MANAGEMENT_ROLE_ID = '1309724300156207216';
+var HR_GATE_ROLE_ID = '1309564310539997196';
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -22,7 +23,8 @@ module.exports = {
         if (interaction.guildId !== VOLARE_GUILD_ID) {
             return interaction.reply({ content: '<:e_decline:1397829342079483904> This command can only be used in the United Volare server.', ephemeral: true });
         }
-        if (!interaction.member.roles.cache.has(MANAGEMENT_ROLE_ID)) {
+        var allowed = await permissions.atOrAboveRole(interaction.client, interaction.user.id, VOLARE_GUILD_ID, HR_GATE_ROLE_ID);
+        if (!allowed) {
             return interaction.reply({ content: '<:e_decline:1397829342079483904> You do not have permission to use this command.', ephemeral: true });
         }
 
@@ -59,7 +61,8 @@ module.exports = {
                 '**Employee:** <@' + target.id + '> (`' + (result.robloxUsername || target.username) + '`)\n' +
                 '**Points added:** ' + amount + '\n' +
                 '**Active points now:** ' + result.total + ' / 9\n' +
-                '**Reason:** ' + reason
+                '**Reason:** ' + reason + '\n' +
+                '**Google Sheet:** ' + (result.sheetSyncLabel || 'unknown')
             )
             .setTimestamp()
             .setFooter({ text: 'Added by ' + interaction.user.username });
