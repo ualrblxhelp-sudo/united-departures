@@ -12,6 +12,8 @@ var TIME_ZONE = 'America/New_York';
 var MONTHLY_FLIGHT_QUOTA = 7;
 var TRAINING_SESSION_PAY = 25;
 var FALLBACK_ATTENDANCE_PAY = 10;
+var PAYMENT_RESET_INTERVAL_MS = 6 * 60 * 60 * 1000;
+var monthlyResetStarted = false;
 
 var ROLE_PAY = {
     'dispatcher': { label: 'Dispatcher', pay: 40 },
@@ -134,6 +136,30 @@ function getCurrentMonthRange(now) {
         end: end,
         label: formatMonthLabel(base),
     };
+}
+
+async function resetMonthlyPaymentAdjustments() {
+    try {
+        var monthRange = getCurrentMonthRange(new Date());
+        var result = await PersonnelRecord.updateMany(
+            { 'paymentAdjustments.0': { $exists: true } },
+            { $pull: { paymentAdjustments: { createdAt: { $lt: monthRange.start } } } }
+        );
+        var changed = Number(result.modifiedCount || 0);
+        if (changed > 0) {
+            console.log('[PersonnelProfile] Reset old payment adjustments for ' + changed + ' personnel record(s).');
+        }
+    } catch (err) {
+        console.error('[PersonnelProfile] resetMonthlyPaymentAdjustments error:', err);
+    }
+}
+
+function startMonthlyResetScheduler() {
+    if (monthlyResetStarted) return;
+    monthlyResetStarted = true;
+    resetMonthlyPaymentAdjustments();
+    setInterval(resetMonthlyPaymentAdjustments, PAYMENT_RESET_INTERVAL_MS);
+    console.log('[PersonnelProfile] Monthly payment reset scheduler started (every 6h).');
 }
 
 function buildAttendanceQuery(target, range) {
@@ -675,4 +701,6 @@ module.exports = {
     appendPersonnelAction: appendPersonnelAction,
     addPaymentAdjustment: addPaymentAdjustment,
     setPositionOverride: setPositionOverride,
+    resetMonthlyPaymentAdjustments: resetMonthlyPaymentAdjustments,
+    startMonthlyResetScheduler: startMonthlyResetScheduler,
 };
