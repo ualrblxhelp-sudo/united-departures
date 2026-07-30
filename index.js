@@ -264,6 +264,14 @@ client.once(Events.ClientReady, async function(c) {
         console.error('[Points] Cleanup scheduler start error:', err);
     }
 
+    // Reset stored manual personnel payment adjustments after each calendar month.
+    try {
+        var personnelProfile = require('./utils/personnelProfile');
+        personnelProfile.startMonthlyResetScheduler();
+    } catch (err) {
+        console.error('[PersonnelProfile] Monthly reset scheduler start error:', err);
+    }
+
     // Start the United newsroom watcher (polls press releases, posts summaries to #hemispheres)
     try {
         newsroom.startNewsroomWatcher(client);
