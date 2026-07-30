@@ -1,7 +1,13 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { Client, GatewayIntentBits } = require('discord.js');
 const PointRecord = require('../models/PointRecord');
 const sheet = require('../utils/sheet');
+const bloxlink = require('../services/bloxlink');
+const roblox = require('../services/roblox');
+
+var VOLARE_GUILD_ID = '1309560657473179679';
+var EMPLOYEE_ROLE_ID = '1309614533056270366';
 
 function hasFlag(flag) {
     return process.argv.indexOf(flag) !== -1;
@@ -12,8 +18,76 @@ function printUsage() {
     console.log('  PURGE_POINTS_CONFIRM=YES node scripts/purge-points.js');
     console.log('  PURGE_POINTS_CONFIRM=YES node scripts/purge-points.js --hard-delete');
     console.log('');
-    console.log('Default mode marks all active points as removed and syncs affected users to 0 in the sheet.');
-    console.log('--hard-delete permanently deletes all point records, then syncs affected users to 0 in the sheet.');
+    console.log('Default mode marks all active points as removed and syncs current Employee-role usernames to 0 in the sheet.');
+    console.log('--hard-delete permanently deletes all point records, then syncs current Employee-role usernames to 0 in the sheet.');
+}
+
+async function resolveEmployeeUsernames() {
+    if (!process.env.BOT_TOKEN) {
+        throw new Error('BOT_TOKEN is not set.');
+    }
+    if (!bloxlink.configured()) {
+        throw new Error('Bloxlink is not configured. Set BLOXLINK_API_KEY and BLOXLINK_GUILD_ID.');
+    }
+
+    var client = new Client({
+        intents: [
+            GatewayIntentBits.Guilds,
+            GatewayIntentBits.GuildMembers,
+        ],
+    });
+
+    try {
+        await client.login(process.env.BOT_TOKEN);
+
+        var guild = client.guilds.cache.get(VOLARE_GUILD_ID) || await client.guilds.fetch(VOLARE_GUILD_ID);
+        if (!guild) throw new Error('United Volare guild not found.');
+
+        await guild.members.fetch();
+
+        var role = guild.roles.cache.get(EMPLOYEE_ROLE_ID) || await guild.roles.fetch(EMPLOYEE_ROLE_ID).catch(function () { return null; });
+        if (!role) throw new Error('Employee role not found: ' + EMPLOYEE_ROLE_ID);
+
+        var usernames = [];
+        var seen = new Set();
+        var failures = [];
+        var members = role.members ? Array.from(role.members.values()) : [];
+
+        for (var i = 0; i < members.length; i++) {
+            var member = members[i];
+            if (!member || !member.user || member.user.bot) continue;
+
+            try {
+                var link = await bloxlink.discordToRoblox(member.id);
+                if (!link.configured || !link.linked || !link.robloxId) {
+                    failures.push(member.user.username + ' (' + member.id + '): not linked in Bloxlink');
+                    continue;
+                }
+
+                var who = await roblox.userIdToUsername(link.robloxId);
+                if (!who || !who.username) {
+                    failures.push(member.user.username + ' (' + member.id + '): Roblox username lookup failed');
+                    continue;
+                }
+
+                var key = String(who.username).trim().toLowerCase();
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    usernames.push(who.username);
+                }
+            } catch (err) {
+                failures.push(member.user.username + ' (' + member.id + '): ' + err.message);
+            }
+        }
+
+        return {
+            usernames: usernames,
+            failures: failures,
+            memberCount: members.length,
+        };
+    } finally {
+        await client.destroy();
+    }
 }
 
 async function main() {
@@ -33,17 +107,15 @@ async function main() {
     await mongoose.connect(process.env.MONGODB_URI);
 
     try {
-        var affected = await PointRecord.find({}, { robloxUsername: 1, discordId: 1, removed: 1 }).lean();
-        var usernames = [];
-        var seen = new Set();
+        var resolved = await resolveEmployeeUsernames();
+        var usernames = resolved.usernames;
 
-        affected.forEach(function(record) {
-            var username = String(record.robloxUsername || '').trim();
-            if (username && !seen.has(username.toLowerCase())) {
-                seen.add(username.toLowerCase());
-                usernames.push(username);
-            }
-        });
+        console.log('[PurgePoints] Employee-role members seen: ' + resolved.memberCount);
+        console.log('[PurgePoints] Employee usernames resolved via Bloxlink: ' + usernames.length);
+        if (resolved.failures.length) {
+            console.log('[PurgePoints] Username resolution failures (' + resolved.failures.length + '):');
+            resolved.failures.forEach(function(item) { console.log('  - ' + item); });
+        }
 
         if (hardDelete) {
             var deleted = await PointRecord.deleteMany({});
