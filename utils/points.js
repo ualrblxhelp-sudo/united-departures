@@ -144,7 +144,14 @@ async function removePoint(client, discordId, opts) {
 function describeSheetSync(result) {
     if (result && result.ok) return 'synced';
     if (result && result.skipped) return 'skipped (sheet webhook not configured)';
-    if (result && result.error) return 'failed (' + result.error + ')';
+    if (result && result.error) {
+        var details = [];
+        if (result.version) details.push('version=' + result.version);
+        if (typeof result.expectedConfigured === 'boolean') details.push('expectedConfigured=' + result.expectedConfigured);
+        if (typeof result.expectedLength === 'number') details.push('expectedLength=' + result.expectedLength);
+        if (typeof result.providedLength === 'number') details.push('providedLength=' + result.providedLength);
+        return 'failed (' + result.error + (details.length ? '; ' + details.join(', ') : '') + ')';
+    }
     return 'failed';
 }
 
