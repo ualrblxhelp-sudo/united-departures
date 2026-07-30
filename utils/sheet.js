@@ -10,7 +10,24 @@
 
 var WEBHOOK_URL = process.env.EMPLOYEE_SHEET_WEBHOOK_URL;
 var SECRET = process.env.EMPLOYEE_SHEET_SECRET;
-var TIMEOUT_MS = 10 * 1000;
+var TIMEOUT_MS = Math.max(5 * 1000, parseInt(process.env.EMPLOYEE_SHEET_TIMEOUT_MS || '30000', 10) || 30000);
+var MAX_TIMEOUT_RETRIES = 1;
+
+async function doSheetPost(payload) {
+    var controller = new AbortController();
+    var timer = setTimeout(function() { controller.abort(); }, TIMEOUT_MS);
+    try {
+        return await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(Object.assign({ secret: SECRET }, payload)),
+            redirect: 'follow',
+            signal: controller.signal,
+        });
+    } finally {
+        clearTimeout(timer);
+    }
+}
 
 async function postToSheet(payload) {
     if (!WEBHOOK_URL) {
@@ -22,28 +39,25 @@ async function postToSheet(payload) {
         return { ok: false, skipped: true };
     }
 
-    var controller = new AbortController();
-    var timer = setTimeout(function() { controller.abort(); }, TIMEOUT_MS);
-    try {
-        var res = await fetch(WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(Object.assign({ secret: SECRET }, payload)),
-            redirect: 'follow',
-            signal: controller.signal,
-        });
-        var text = await res.text();
-        var data;
-        try { data = JSON.parse(text); } catch (e) { data = { ok: false, error: 'non-JSON response', raw: text.slice(0, 200) }; }
-        if (!data.ok) {
-            console.error('[Sheet] Update failed (' + JSON.stringify(payload) + '):', data.error || text.slice(0, 200));
+    for (var attempt = 0; attempt <= MAX_TIMEOUT_RETRIES; attempt++) {
+        try {
+            var res = await doSheetPost(payload);
+            var text = await res.text();
+            var data;
+            try { data = JSON.parse(text); } catch (e) { data = { ok: false, error: 'non-JSON response', raw: text.slice(0, 200) }; }
+            if (!data.ok) {
+                console.error('[Sheet] Update failed (' + JSON.stringify(payload) + '):', data.error || text.slice(0, 200));
+            }
+            return data;
+        } catch (err) {
+            var isAbort = err && err.name === 'AbortError';
+            if (isAbort && attempt < MAX_TIMEOUT_RETRIES) {
+                console.warn('[Sheet] POST timeout, retrying (' + (attempt + 1) + '/' + MAX_TIMEOUT_RETRIES + '):', JSON.stringify(payload));
+                continue;
+            }
+            console.error('[Sheet] POST error (' + JSON.stringify(payload) + '):', isAbort ? ('timeout after ' + TIMEOUT_MS + 'ms') : err.message);
+            return { ok: false, error: isAbort ? ('timeout after ' + TIMEOUT_MS + 'ms') : err.message };
         }
-        return data;
-    } catch (err) {
-        console.error('[Sheet] POST error (' + JSON.stringify(payload) + '):', err.name === 'AbortError' ? 'timeout' : err.message);
-        return { ok: false, error: err.message };
-    } finally {
-        clearTimeout(timer);
     }
 }
 
