@@ -5,6 +5,14 @@ const permissions = require('../../services/permissions');
 var VOLARE_GUILD_ID = '1309560657473179679';
 var HR_GATE_ROLE_ID = '1309564310539997196';
 
+function describeSheetStatus(result) {
+    if (result.sheetSyncLabel) return result.sheetSyncLabel;
+    if (result.sheetSync && result.sheetSync.ok) return 'synced';
+    if (result.sheetSync && result.sheetSync.skipped) return 'skipped (sheet webhook not configured)';
+    if (result.sheetSync && result.sheetSync.error) return 'failed (' + result.sheetSync.error + ')';
+    return 'not reported by backend';
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('removepoint')
@@ -49,7 +57,7 @@ module.exports = {
                 '**Employee:** <@' + target.id + '> (`' + (result.robloxUsername || target.username) + '`)\n' +
                 '**Points removed:** ' + result.removed + '\n' +
                 '**Active points now:** ' + result.total + ' / 9\n' +
-                '**Google Sheet:** ' + (result.sheetSyncLabel || 'unknown')
+                '**Google Sheet:** ' + describeSheetStatus(result)
             )
             .setTimestamp()
             .setFooter({ text: 'Removed by ' + interaction.user.username });
