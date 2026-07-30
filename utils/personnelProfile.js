@@ -1,6 +1,8 @@
+const { EmbedBuilder } = require('discord.js');
 const Attendance = require('../models/Attendance');
 const Flight = require('../models/Flight');
 const TrainingAttendanceLog = require('../models/TrainingAttendanceLog');
+const PersonnelRecord = require('../models/PersonnelRecord');
 const points = require('./points');
 const bloxlink = require('../services/bloxlink');
 const roblox = require('../services/roblox');
@@ -60,6 +62,11 @@ function formatShortDate(date) {
         day: 'numeric',
         timeZone: TIME_ZONE,
     }).format(date);
+}
+
+function currentMonthKey(now) {
+    var parts = getTimeZoneParts(now || new Date(), TIME_ZONE);
+    return String(parts.year) + '-' + String(parts.month).padStart(2, '0');
 }
 
 function getTimeZoneParts(date, timeZone) {
@@ -241,6 +248,20 @@ async function fetchRobloxAvatar(robloxId) {
     } catch (err) {
         return null;
     }
+}
+
+async function getPersonnelRecord(discordId) {
+    if (!discordId) return null;
+    return PersonnelRecord.findOne({ discordId: String(discordId) }).catch(function () { return null; });
+}
+
+function defaultPositionFromMember(member) {
+    if (!member || !member.roles || !member.roles.cache) return 'Unassigned';
+    var roles = member.roles.cache
+        .filter(function (role) { return role && role.name !== '@everyone'; })
+        .sort(function (a, b) { return b.position - a.position; })
+        .map(function (role) { return role.name; });
+    return roles[0] || 'Unassigned';
 }
 
 async function resolveFromDiscord(client, guild, userId) {
@@ -473,6 +494,17 @@ async function buildPersonnelProfile(target) {
     var trainingWage = buildTrainingBreakdown(trainingLogs);
 
     var pointCount = target.discordId ? await points.getActiveCount(target.discordId).catch(function () { return null; }) : null;
+    var personnelRecord = await getPersonnelRecord(target.discordId);
+    var monthKey = currentMonthKey(new Date());
+    var manualPaymentAdjustments = [];
+    if (personnelRecord && Array.isArray(personnelRecord.paymentAdjustments)) {
+        manualPaymentAdjustments = personnelRecord.paymentAdjustments.filter(function (entry) {
+            return currentMonthKey(entry.createdAt) === monthKey;
+        });
+    }
+    var manualPaymentTotal = manualPaymentAdjustments.reduce(function (sum, entry) {
+        return sum + (Number(entry.amount) || 0);
+    }, 0);
     var flightsThisMonth = monthAttendance.length;
 
     return {
@@ -481,9 +513,16 @@ async function buildPersonnelProfile(target) {
         flightsThisMonth: flightsThisMonth,
         totalFlightsAttended: totalFlightsAttended,
         activePoints: pointCount,
-        monthlyWage: flightWage.total + trainingWage.total,
+        monthlyWage: flightWage.total + trainingWage.total + manualPaymentTotal,
         flightWage: flightWage,
         trainingWage: trainingWage,
+        manualPaymentTotal: manualPaymentTotal,
+        position: personnelRecord && personnelRecord.positionOverride
+            ? personnelRecord.positionOverride
+            : defaultPositionFromMember(target.member),
+        recentActions: personnelRecord && Array.isArray(personnelRecord.actions)
+            ? personnelRecord.actions.slice(-5).reverse()
+            : [],
         roblox: {
             id: target.robloxId,
             username: target.robloxUsername,
@@ -504,9 +543,136 @@ async function buildPersonnelProfile(target) {
     };
 }
 
+function buildIdentityValue(profile) {
+    var lines = [];
+    if (profile.roblox.displayName) lines.push('**Display Name:** ' + profile.roblox.displayName);
+    lines.push('**Username:** ' + (profile.roblox.username || 'Unavailable'));
+    lines.push('**User ID:** ' + (profile.roblox.id || 'Unavailable'));
+    if (profile.roblox.profileUrl) lines.push('**Profile:** ' + profile.roblox.profileUrl);
+    if (!profile.roblox.linked) lines.push('**Bloxlink:** Not linked');
+    return lines.join('\n');
+}
+
+function buildPerformanceValue(profile) {
+    var pointsLabel = typeof profile.activePoints === 'number'
+        ? profile.activePoints + ' / 9'
+        : 'Unavailable';
+
+    return [
+        '**Position:** ' + (profile.position || 'Unassigned'),
+        '**Monthly wage:** ' + profile.monthlyWage + ' R$',
+        '**Flights attended:** ' + profile.flightsThisMonth + ' / ' + profile.quota,
+        '**Flights attended total:** ' + profile.totalFlightsAttended,
+        '**Training sessions hosted:** ' + profile.trainingWage.rows.length,
+        '**Active points:** ' + pointsLabel,
+    ].join('\n');
+}
+
+function buildRecentActionsValue(profile) {
+    if (!profile.recentActions || !profile.recentActions.length) return 'No HR actions logged.';
+    return profile.recentActions.map(function (entry) {
+        var bits = ['• ' + String(entry.type || '').replace(/_/g, ' ')];
+        if (entry.durationDays) bits.push('(' + entry.durationDays + 'd)');
+        if (entry.reason) bits.push('— ' + entry.reason);
+        return bits.join(' ');
+    }).join('\n');
+}
+
+function buildProfileEmbed(profile, options) {
+    options = options || {};
+    var displayName = profile.discord.displayName || profile.discord.username || profile.roblox.username || 'Unknown Employee';
+
+    var embed = new EmbedBuilder()
+        .setTitle(options.title || 'United Volare Personnel Profile')
+        .setColor(options.color || 0x080C96)
+        .setDescription(
+            profile.discord.mention + '\n' +
+            '**Month:** ' + profile.monthLabel + '\n' +
+            '**Discord:** ' + (profile.discord.username || 'Unavailable')
+        )
+        .addFields(
+            { name: 'Roblox Identity', value: buildIdentityValue(profile), inline: true },
+            { name: 'Performance', value: buildPerformanceValue(profile), inline: true },
+            {
+                name: 'Wage Breakdown',
+                value:
+                    '**Flight pay:** ' + profile.flightWage.total + ' R$\n' +
+                    '**Training pay:** ' + profile.trainingWage.total + ' R$\n' +
+                    '**Manual adjustments:** ' + profile.manualPaymentTotal + ' R$\n' +
+                    '**Total:** ' + profile.monthlyWage + ' R$',
+                inline: false,
+            },
+            { name: 'Flight Pay Details', value: profile.flightLines, inline: false },
+            { name: 'Training Pay Details', value: profile.trainingLines, inline: false },
+            { name: 'Recent HR Actions', value: buildRecentActionsValue(profile), inline: false }
+        )
+        .setTimestamp()
+        .setFooter({ text: 'United Volare • ' + displayName });
+
+    if (profile.roblox.avatarUrl) embed.setThumbnail(profile.roblox.avatarUrl);
+    return embed;
+}
+
+async function appendPersonnelAction(discordId, payload) {
+    if (!discordId) return null;
+    var record = await PersonnelRecord.findOne({ discordId: String(discordId) });
+    if (!record) record = new PersonnelRecord({ discordId: String(discordId) });
+    record.actions.push({
+        type: payload.type,
+        reason: payload.reason || '',
+        issuedBy: payload.issuedBy || null,
+        issuedByUsername: payload.issuedByUsername || '',
+        durationDays: payload.durationDays == null ? null : Number(payload.durationDays),
+        meta: payload.meta || '',
+    });
+    await record.save();
+    return record;
+}
+
+async function addPaymentAdjustment(discordId, payload) {
+    if (!discordId) return null;
+    var record = await PersonnelRecord.findOne({ discordId: String(discordId) });
+    if (!record) record = new PersonnelRecord({ discordId: String(discordId) });
+    record.paymentAdjustments.push({
+        amount: Number(payload.amount) || 0,
+        reason: payload.reason || '',
+        editedBy: payload.editedBy || null,
+        editedByUsername: payload.editedByUsername || '',
+    });
+    record.actions.push({
+        type: 'payment_edit',
+        reason: payload.reason || '',
+        issuedBy: payload.editedBy || null,
+        issuedByUsername: payload.editedByUsername || '',
+        meta: 'adjustment=' + (Number(payload.amount) || 0),
+    });
+    await record.save();
+    return record;
+}
+
+async function setPositionOverride(discordId, payload) {
+    if (!discordId) return null;
+    var record = await PersonnelRecord.findOne({ discordId: String(discordId) });
+    if (!record) record = new PersonnelRecord({ discordId: String(discordId) });
+    record.positionOverride = payload.position || '';
+    record.actions.push({
+        type: 'position_edit',
+        reason: payload.reason || '',
+        issuedBy: payload.editedBy || null,
+        issuedByUsername: payload.editedByUsername || '',
+        meta: 'position=' + (payload.position || ''),
+    });
+    await record.save();
+    return record;
+}
+
 module.exports = {
     VOLARE_GUILD_ID: VOLARE_GUILD_ID,
     MONTHLY_FLIGHT_QUOTA: MONTHLY_FLIGHT_QUOTA,
     resolveProfileTarget: resolveProfileTarget,
     buildPersonnelProfile: buildPersonnelProfile,
+    buildProfileEmbed: buildProfileEmbed,
+    appendPersonnelAction: appendPersonnelAction,
+    addPaymentAdjustment: addPaymentAdjustment,
+    setPositionOverride: setPositionOverride,
 };
