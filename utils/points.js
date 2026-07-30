@@ -74,10 +74,20 @@ async function addPoint(client, discordId, opts) {
         const total = await getActiveCount(discordId);
 
         // Mirror the new active total to the Employee Database sheet (Sanction Status/CURRENT).
-        try { await sheet.syncSanctionTotal(robloxUsername, total); }
-        catch (e) { console.error('[Points] sheet sync (add) error:', e.message); }
+        var sheetResult = { ok: false, skipped: true };
+        try { sheetResult = await sheet.syncSanctionTotal(robloxUsername, total); }
+        catch (e) {
+            console.error('[Points] sheet sync (add) error:', e.message);
+            sheetResult = { ok: false, error: e.message };
+        }
 
-        return { ok: true, total: total, robloxUsername: robloxUsername };
+        return {
+            ok: true,
+            total: total,
+            robloxUsername: robloxUsername,
+            sheetSync: sheetResult,
+            sheetSyncLabel: describeSheetSync(sheetResult),
+        };
     } catch (err) {
         console.error('[Points] addPoint error:', err);
         return { ok: false, error: err.message };
@@ -110,19 +120,32 @@ async function removePoint(client, discordId, opts) {
         const total = await getActiveCount(discordId);
 
         // Mirror the new active total to the Employee Database sheet (Sanction Status/CURRENT).
-        try { await sheet.syncSanctionTotal(active[0].robloxUsername, total); }
-        catch (e) { console.error('[Points] sheet sync (remove) error:', e.message); }
+        var sheetResult = { ok: false, skipped: true };
+        try { sheetResult = await sheet.syncSanctionTotal(active[0].robloxUsername, total); }
+        catch (e) {
+            console.error('[Points] sheet sync (remove) error:', e.message);
+            sheetResult = { ok: false, error: e.message };
+        }
 
         return {
             ok: true,
             removed: active.length,
             total: total,
             robloxUsername: active[0].robloxUsername,
+            sheetSync: sheetResult,
+            sheetSyncLabel: describeSheetSync(sheetResult),
         };
     } catch (err) {
         console.error('[Points] removePoint error:', err);
         return { ok: false, error: err.message };
     }
+}
+
+function describeSheetSync(result) {
+    if (result && result.ok) return 'synced';
+    if (result && result.skipped) return 'skipped (sheet webhook not configured)';
+    if (result && result.error) return 'failed (' + result.error + ')';
+    return 'failed';
 }
 
 // Periodic sweep that flips expired records' `removed` flag to true.
