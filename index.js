@@ -87,6 +87,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (mid.indexOf('fp_') === 0) {
                 return await client.commands.get('flightpanel').handleModal(interaction);
             }
+            if (mid.indexOf('lu_modal_') === 0) {
+                return await client.commands.get('lookup').handleModal(interaction);
+            }
             return;
         }
 
@@ -103,6 +106,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             }
             if (bid.indexOf('tp_') === 0) {
                 return await client.commands.get('training').handleButton(interaction);
+            }
+            if (bid.indexOf('lu_btn_') === 0) {
+                return await client.commands.get('lookup').handleButton(interaction);
             }
             if (bid.startsWith('inactivity_approve_')) {
                 var userId = bid.replace('inactivity_approve_', '');
