@@ -266,6 +266,13 @@ async function sendChannelPing(client, channelId, content, options) {
     return true;
 }
 
+function getStartFlightChannelId(flight) {
+    if (flight && flight.flightType === 'premium') {
+        return ids.PREMIUM_CALENDAR_CHANNEL_ID || ids.FLIGHT_ANNOUNCE_CHANNEL_ID;
+    }
+    return ids.FLIGHT_ANNOUNCE_CHANNEL_ID;
+}
+
 function startFlightMessage(flight) {
     return '> ### <:e_plane:1397829563249328138> **' + flight.flightNumber + '**\n' +
         '-# **Good Leads the Way** — United Operations\n' +
@@ -414,8 +421,9 @@ module.exports = {
             await flight.save();
 
             var startedPosted = false;
+            var startChannelId = getStartFlightChannelId(flight);
             try {
-                startedPosted = await sendChannelPing(interaction.client, ids.FLIGHT_ANNOUNCE_CHANNEL_ID, startFlightMessage(flight), { ghostPing: true });
+                startedPosted = await sendChannelPing(interaction.client, startChannelId, startFlightMessage(flight), { ghostPing: true });
             } catch (err) {
                 console.error('[FlightPanel] Start announce error:', err);
             }
@@ -429,8 +437,8 @@ module.exports = {
             await renderPanel(interaction, flight._id);
             return interaction.followUp({
                 content: startedPosted
-                    ? '<:volare_check:1408484391348605069> **' + flight.flightNumber + '** is now in progress and the public join ping was posted.'
-                    : '\u26A0\uFE0F **' + flight.flightNumber + '** is now in progress, but I could not post the public join ping.',
+                    ? '<:volare_check:1408484391348605069> **' + flight.flightNumber + '** is now in progress and the ' + (flight.flightType === 'premium' ? 'premium' : 'public') + ' join ping was posted.'
+                    : '\u26A0\uFE0F **' + flight.flightNumber + '** is now in progress, but I could not post the ' + (flight.flightType === 'premium' ? 'premium' : 'public') + ' join ping.',
                 ephemeral: true,
             });
         }
