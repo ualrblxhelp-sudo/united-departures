@@ -21,6 +21,7 @@ module.exports = {
     TRAINING_PANEL_THREAD_ID: process.env.TRAINING_PANEL_THREAD_ID || '1531864811405705236',
     TRAINING_COMPLETION_THREAD_ID: process.env.TRAINING_COMPLETION_THREAD_ID || process.env.TRAINING_LOG_CHANNEL_ID || '1531864745731297421',
     TRAINING_ATTENDANCE_THREAD_ID: process.env.TRAINING_ATTENDANCE_THREAD_ID || '1531864702123249755',
+    RESIGNATION_REVIEW_THREAD_ID: process.env.RESIGNATION_REVIEW_THREAD_ID || '1534699797263417465',
     // Volare (staff) briefing channel for crew callouts before departure.
     BRIEFING_CHANNEL_ID: process.env.BRIEFING_CHANNEL_ID || '1528984319614259363',
     // Permanent Roblox hub link used in Discord scheduled events and panel announcements.
