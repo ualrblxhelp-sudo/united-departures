@@ -4,8 +4,7 @@ const {
 } = require('discord.js');
 const LeaveOfAbsence = require('../models/LeaveOfAbsence');
 const sheet = require('../utils/sheet');
-
-var INACTIVITY_CHANNEL_ID = process.env.INACTIVITY_CHANNEL_ID;
+const ids = require('../config/ids');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -67,14 +66,14 @@ module.exports = {
         try {
             var guild = interaction.client.guilds.cache.get('1309560657473179679');
             var channel = null;
-            if (INACTIVITY_CHANNEL_ID && guild) {
-                channel = guild.channels.cache.get(INACTIVITY_CHANNEL_ID);
-                if (!channel) channel = await guild.channels.fetch(INACTIVITY_CHANNEL_ID).catch(function() { return null; });
+            if (ids.INACTIVITY_REVIEW_THREAD_ID && guild) {
+                channel = guild.channels.cache.get(ids.INACTIVITY_REVIEW_THREAD_ID);
+                if (!channel) channel = await guild.channels.fetch(ids.INACTIVITY_REVIEW_THREAD_ID).catch(function() { return null; });
             }
             if (channel) {
                 await channel.send({ embeds: [embed], components: [row] });
             } else {
-                console.error('[Inactivity] Channel not found: ' + INACTIVITY_CHANNEL_ID);
+                console.error('[Inactivity] Review thread not found: ' + ids.INACTIVITY_REVIEW_THREAD_ID);
             }
         } catch (err) {
             console.error('[Inactivity] Error:', err);
