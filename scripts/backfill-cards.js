@@ -50,6 +50,8 @@ async function ownsGamePass(userId, gamePassId) {
     var url = 'https://inventory.roblox.com/v1/users/' + userId
         + '/items/GamePass/' + gamePassId + '/is-owned';
 
+    var lastReason = 'unknown';
+
     for (var attempt = 1; attempt <= 3; attempt++) {
         try {
             var res = await fetch(url);
@@ -57,20 +59,37 @@ async function ownsGamePass(userId, gamePassId) {
             if (res.status === 429) {
                 // Backing off rather than failing: a 429 means "later", not
                 // "no", and treating it as no would silently skip a cardholder.
+                lastReason = 'rate limited (429)';
                 await sleep(2000 * attempt);
                 continue;
             }
 
-            if (!res.ok) return null;
+            if (!res.ok) {
+                // Report the STATUS and body. A blanket "lookup failed" hides
+                // whether this is a block, a bad id, or an outage -- which are
+                // three completely different problems.
+                var body = '';
+                try { body = (await res.text()).slice(0, 120); } catch (e) {}
+                lastReason = 'HTTP ' + res.status + (body ? ' ' + body : '');
+
+                // 4xx other than 429 will not fix themselves on retry.
+                if (res.status >= 400 && res.status < 500) {
+                    return { ok: false, reason: lastReason };
+                }
+
+                await sleep(1000 * attempt);
+                continue;
+            }
 
             var text = (await res.text()).trim();
-            return text === 'true';
+            return { ok: true, owns: text === 'true' };
         } catch (err) {
+            lastReason = err.message || String(err);
             await sleep(1000 * attempt);
         }
     }
 
-    return null; // unknown after retries -- reported, never treated as false
+    return { ok: false, reason: lastReason };
 }
 
 async function allMembers() {
@@ -107,17 +126,30 @@ async function main() {
         for (var c = 0; c < CARDS.length; c++) {
             var entry = CARDS[c];
 
-            var owns = await ownsGamePass(userId, entry.gamePassId);
+            var lookup = await ownsGamePass(userId, entry.gamePassId);
             checked++;
             await sleep(DELAY_MS);
 
-            if (owns === null) {
-                console.log('  ? ' + label + ' / ' + entry.card + ' -- lookup failed, skipped');
+            if (!lookup.ok) {
+                console.log('  ? ' + label + ' / ' + entry.card
+                    + ' -- lookup failed: ' + lookup.reason);
                 failed++;
+
+                // If the very first lookups all fail the same way, this is an
+                // environment problem, not a per-user one. Stop rather than
+                // grinding through thousands of identical failures.
+                if (failed >= 4 && granted === 0 && already === 0) {
+                    console.log('');
+                    console.log('Aborting: the first ' + failed + ' lookups all failed.');
+                    console.log('Reason: ' + lookup.reason);
+                    console.log('Roblox is not answering from this host. See notes at the');
+                    console.log('bottom of this script for the alternatives.');
+                    process.exit(1);
+                }
                 continue;
             }
 
-            if (!owns) continue;
+            if (!lookup.owns) continue;
 
             if (DRY_RUN) {
                 console.log('  + ' + label + ' / ' + entry.card + ' -- WOULD grant');
