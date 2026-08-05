@@ -110,6 +110,9 @@ client.on(Events.InteractionCreate, async function(interaction) {
             if (bid.indexOf('lu_btn_') === 0) {
                 return await client.commands.get('lookup').handleButton(interaction);
             }
+            if (bid.indexOf('resign_') === 0) {
+                return await client.commands.get('resign').handleButton(interaction);
+            }
             if (bid.startsWith('inactivity_approve_')) {
                 var userId = bid.replace('inactivity_approve_', '');
                 return await client.commands.get('inactivity').handleApprove(interaction, userId);
