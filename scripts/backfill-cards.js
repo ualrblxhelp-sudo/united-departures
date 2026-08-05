@@ -38,9 +38,26 @@ var CARDS = [
 
 var DRY_RUN = process.argv.indexOf('--dry-run') !== -1;
 
-// Roblox rate-limits inventory lookups. One member at a time with a small gap
-// is slow but finishes; hammering it returns 429s and the run has to be redone.
-var DELAY_MS = 120;
+// Roblox rate-limits the inventory API HARD from cloud hosts -- Render's egress
+// IP is shared with many other services, so the budget is often already spent
+// before this script sends anything. 120ms produced a 429 on the very first
+// request.
+//
+// Two seconds per lookup is slow (101 members x 4 cards = ~13 minutes) but it
+// actually completes, which beats a fast run that fails immediately. Override
+// with --delay=5000 if it is still throttled.
+var DELAY_MS = 2000;
+for (var ai = 0; ai < process.argv.length; ai++) {
+    var m = /^--delay=(\d+)$/.exec(process.argv[ai]);
+    if (m) DELAY_MS = Number(m[1]);
+}
+
+// Resume point, for picking up after an interruption: --start=40
+var START_AT = 0;
+for (var si = 0; si < process.argv.length; si++) {
+    var sm = /^--start=(\d+)$/.exec(process.argv[si]);
+    if (sm) START_AT = Number(sm[1]);
+}
 
 function sleep(ms) {
     return new Promise(function (r) { setTimeout(r, ms); });
@@ -52,15 +69,20 @@ async function ownsGamePass(userId, gamePassId) {
 
     var lastReason = 'unknown';
 
-    for (var attempt = 1; attempt <= 3; attempt++) {
+    for (var attempt = 1; attempt <= 6; attempt++) {
         try {
             var res = await fetch(url);
 
             if (res.status === 429) {
                 // Backing off rather than failing: a 429 means "later", not
                 // "no", and treating it as no would silently skip a cardholder.
+                // Exponential, capped at a minute. A 429 here is an IP-level
+                // budget, not a per-request one, so short retries just burn
+                // more of it -- waiting properly is the only thing that works.
                 lastReason = 'rate limited (429)';
-                await sleep(2000 * attempt);
+                var wait = Math.min(60000, 5000 * Math.pow(2, attempt - 1));
+                console.log('    (429 -- waiting ' + Math.round(wait / 1000) + 's)');
+                await sleep(wait);
                 continue;
             }
 
@@ -118,7 +140,11 @@ async function main() {
 
     var granted = 0, already = 0, skipped = 0, failed = 0, checked = 0;
 
-    for (var i = 0; i < members.length; i++) {
+    if (START_AT > 0) {
+        console.log('resuming from member index ' + START_AT);
+    }
+
+    for (var i = START_AT; i < members.length; i++) {
         var m = members[i];
         var userId = m.roblox_user_id;
         var label = (m.username || '?') + ' (' + userId + ')';
@@ -138,7 +164,8 @@ async function main() {
                 // If the very first lookups all fail the same way, this is an
                 // environment problem, not a per-user one. Stop rather than
                 // grinding through thousands of identical failures.
-                if (failed >= 4 && granted === 0 && already === 0) {
+                var fatal = lookup.reason.indexOf('429') === -1;
+                if (fatal && failed >= 4 && granted === 0 && already === 0) {
                     console.log('');
                     console.log('Aborting: the first ' + failed + ' lookups all failed.');
                     console.log('Reason: ' + lookup.reason);
@@ -177,8 +204,10 @@ async function main() {
             }
         }
 
-        if ((i + 1) % 25 === 0) {
-            console.log('... ' + (i + 1) + '/' + members.length + ' members');
+        if ((i + 1) % 10 === 0) {
+            // Index is printed so an interrupted run can resume with --start.
+            console.log('... ' + (i + 1) + '/' + members.length
+                + ' members (resume with --start=' + (i + 1) + ')');
         }
     }
 
