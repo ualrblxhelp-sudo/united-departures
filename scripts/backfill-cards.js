@@ -27,13 +27,18 @@
 
 var sb = require('../services/supabase');
 
-// gamepass -> canonical card key. These MUST match card_defs.card exactly;
-// that mismatch is the whole reason this script exists.
+// Catalog ASSET ids -> canonical card key.
+//
+// Cards are T-shirts (AssetTypeId 2), not Game Passes. The first version of
+// this script queried .../items/GamePass/... and returned false for all 102
+// members, because no game pass with these ids exists.
+//
+// Keys must match card_defs.card exactly.
 var CARDS = [
-    { card: 'gateway',     gamePassId: 112966589478875 },
-    { card: 'explorer',    gamePassId: 74282656110256 },
-    { card: 'quest',       gamePassId: 119093267072128 },
-    { card: 'united_club', gamePassId: 88848246707563 },
+    { card: 'gateway',     assetId: 112966589478875 },
+    { card: 'explorer',    assetId: 74282656110256 },
+    { card: 'quest',       assetId: 119093267072128 },
+    { card: 'united_club', assetId: 88848246707563 },
 ];
 
 var DRY_RUN = process.argv.indexOf('--dry-run') !== -1;
@@ -63,9 +68,9 @@ function sleep(ms) {
     return new Promise(function (r) { setTimeout(r, ms); });
 }
 
-async function ownsGamePass(userId, gamePassId) {
+async function ownsAsset(userId, assetId) {
     var url = 'https://inventory.roblox.com/v1/users/' + userId
-        + '/items/GamePass/' + gamePassId + '/is-owned';
+        + '/items/Asset/' + assetId + '/is-owned';
 
     var lastReason = 'unknown';
 
@@ -101,6 +106,15 @@ async function ownsGamePass(userId, gamePassId) {
                 // the whole backfill because of a single terminated account.
                 if (res.status === 400 && body.indexOf('does not exist') !== -1) {
                     return { ok: true, owns: false, gone: true };
+                }
+
+                // Private inventory. NOT the same as "does not own it" -- we
+                // simply cannot see. Counting it as false would silently skip a
+                // real cardholder, so it is reported separately; MilesOnJoin
+                // credits them in-game instead, where PlayerOwnsAsset works
+                // regardless of inventory privacy.
+                if (body.indexOf("don't have permissions") !== -1) {
+                    return { ok: true, owns: false, private: true };
                 }
 
                 // Other 4xx will not fix themselves on retry.
@@ -147,7 +161,7 @@ async function main() {
     console.log('cards: ' + CARDS.map(function (c) { return c.card; }).join(', '));
     console.log('');
 
-    var granted = 0, already = 0, skipped = 0, failed = 0, checked = 0, gone = 0;
+    var granted = 0, already = 0, skipped = 0, failed = 0, checked = 0, gone = 0, priv = 0;
 
     if (START_AT > 0) {
         console.log('resuming from member index ' + START_AT);
@@ -161,7 +175,7 @@ async function main() {
         for (var c = 0; c < CARDS.length; c++) {
             var entry = CARDS[c];
 
-            var lookup = await ownsGamePass(userId, entry.gamePassId);
+            var lookup = await ownsAsset(userId, entry.assetId);
             checked++;
             await sleep(DELAY_MS);
 
@@ -181,6 +195,14 @@ async function main() {
                     console.log('Roblox is not answering from this host. See notes at the');
                     console.log('bottom of this script for the alternatives.');
                     process.exit(1);
+                }
+                continue;
+            }
+
+            if (lookup.private) {
+                if (entry.card === CARDS[0].card) {
+                    console.log('  ~ ' + label + ' -- inventory private, will be credited on next join');
+                    priv++;
                 }
                 continue;
             }
@@ -235,6 +257,7 @@ async function main() {
     console.log('granted          : ' + granted);
     console.log('already claimed  : ' + already);
     console.log('banned/deleted   : ' + gone);
+    console.log('private inventory: ' + priv + '  (credited in-game on next join)');
     console.log('lookup failures  : ' + failed);
     console.log('');
     if (failed > 0) {
