@@ -1,5 +1,6 @@
 const {
     SlashCommandBuilder,
+    EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
@@ -10,9 +11,20 @@ const {
 const permissions = require('../services/permissions');
 const personnelProfile = require('../utils/personnelProfile');
 const points = require('../utils/points');
+const suspensionReturns = require('../utils/suspensionReturns');
+const ids = require('../config/ids');
 
 var VOLARE_GUILD_ID = '1309560657473179679';
-var HR_GATE_ROLE_ID = '1309564310539997196';
+var MAIN_SERVER_ID = '1309560657473179679';
+var LOOKUP_ROLE_ID = '1486059204534997201';
+var EMBED_COLOR = 0x4D1B55;
+var DISCIPLINARY_MANUAL_URL = 'https://docs.google.com/document/d/1Q38Q60kB03Un89TWlOtkN6Pl2RIPHa4GYqSerU62GS0/edit?usp=drive_link';
+var COMMITMENT_POLICY_URL = 'https://drive.google.com/file/d/1MHANmDI87qfDi_76QZq84hrPRSwo4Xal/view?usp=sharing';
+var SUSPENSION_DAYS = 7;
+
+function mentionlessUsername(user) {
+    return '@' + String(user && user.username ? user.username : 'employee');
+}
 
 function buttonId(action, targetId) {
     return 'lu_btn_' + action + '_' + targetId;
@@ -31,12 +43,12 @@ function buildLookupComponents(targetId) {
         new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId(buttonId('warn', targetId)).setLabel('Warning').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId(buttonId('suspend', targetId)).setLabel('Suspension').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId(buttonId('terminate', targetId)).setLabel('Termination').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId(buttonId('terminate', targetId)).setLabel('Termination').setStyle(ButtonStyle.Secondary),
         ),
         new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(buttonId('payment', targetId)).setLabel('Edit Payment').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(buttonId('points', targetId)).setLabel('Edit Points').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId(buttonId('position', targetId)).setLabel('Edit Position').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId(buttonId('payment', targetId)).setLabel('Edit Payment').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(buttonId('points', targetId)).setLabel('Edit Points').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(buttonId('position', targetId)).setLabel('Edit Position').setStyle(ButtonStyle.Secondary),
         ),
     ];
 }
@@ -49,7 +61,8 @@ async function ensureHrAccess(interaction) {
         }).catch(function () {});
         return false;
     }
-    var allowed = await permissions.atOrAboveRole(interaction.client, interaction.user.id, VOLARE_GUILD_ID, HR_GATE_ROLE_ID);
+    var member = interaction.member || await interaction.guild.members.fetch(interaction.user.id).catch(function () { return null; });
+    var allowed = Boolean(member && member.roles && member.roles.cache && member.roles.cache.has(LOOKUP_ROLE_ID));
     if (!allowed) {
         await interaction.reply({
             content: '<:e_decline:1397829342079483904> You do not have permission to use this command.',
@@ -78,7 +91,7 @@ async function sendLookupView(interaction, targetId, prefixText) {
     var profile = await personnelProfile.buildPersonnelProfile(resolved.target);
     var embed = personnelProfile.buildProfileEmbed(profile, {
         title: 'United Volare Personnel Lookup',
-        color: 0x0b0fa8,
+        color: EMBED_COLOR,
     });
 
     return interaction.reply({
@@ -97,9 +110,9 @@ function buildWarnModal(targetId) {
             new ActionRowBuilder().addComponents(
                 new TextInputBuilder()
                     .setCustomId('reason')
-                    .setLabel('Reason')
+                    .setLabel('Internal note')
                     .setStyle(TextInputStyle.Paragraph)
-                    .setRequired(true)
+                    .setRequired(false)
                     .setMaxLength(500)
             )
         );
@@ -112,18 +125,10 @@ function buildSuspendModal(targetId) {
         .addComponents(
             new ActionRowBuilder().addComponents(
                 new TextInputBuilder()
-                    .setCustomId('days')
-                    .setLabel('Suspension length in days')
-                    .setStyle(TextInputStyle.Short)
-                    .setRequired(true)
-                    .setMaxLength(3)
-            ),
-            new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
                     .setCustomId('reason')
-                    .setLabel('Reason')
+                    .setLabel('Internal note')
                     .setStyle(TextInputStyle.Paragraph)
-                    .setRequired(true)
+                    .setRequired(false)
                     .setMaxLength(500)
             )
         );
@@ -137,9 +142,9 @@ function buildTerminateModal(targetId) {
             new ActionRowBuilder().addComponents(
                 new TextInputBuilder()
                     .setCustomId('reason')
-                    .setLabel('Reason')
+                    .setLabel('Internal note')
                     .setStyle(TextInputStyle.Paragraph)
-                    .setRequired(true)
+                    .setRequired(false)
                     .setMaxLength(500)
             )
         );
@@ -221,10 +226,66 @@ function buildPositionModal(targetId) {
 async function dmEmployee(targetUser, message) {
     if (!targetUser) return false;
     try {
-        await targetUser.send({ content: message });
+        await targetUser.send({ embeds: [message] });
         return true;
     } catch (err) {
         return false;
+    }
+}
+
+function warningEmbed(user) {
+    return new EmbedBuilder()
+        .setColor(EMBED_COLOR)
+        .setDescription(
+            '-# _ _\n' +
+            '> ### <:volare_hammer:1408481914112835755> **This is a Warning.**\n' +
+            '-# **Resignation Confirmation** — Human Resources\n\n' +
+            '> <:volare_arrow:1408485394747490385>Hello, **' + mentionlessUsername(user) + '**. You have been assigned **1** warning due to your violation of a policy listed in our [**Disciplinary Manual**](<' + DISCIPLINARY_MANUAL_URL + '>). Please ensure to not commit any sort of actions that violate our regulations in the future.\n\n' +
+            '<:volare_fa:1408298318861176920> **Jake Marlon**\n' +
+            '> -# Executive Vice President, Human Resources'
+        )
+        .setTimestamp();
+}
+
+function suspensionEmbed(user) {
+    return new EmbedBuilder()
+        .setColor(EMBED_COLOR)
+        .setDescription(
+            '-# _ _\n' +
+            '> ### <:volare_hammer:1408481914112835755> **Suspension Notice.**\n' +
+            '-# **You have received a Suspension** — Human Resources\n\n' +
+            '> <:volare_arrow:1408485394747490385>Hello, **' + mentionlessUsername(user) + '**. You have been assigned a **7** day suspension for violating a **major** regulation(s) listed in our [**Disciplinary Manual**](<' + DISCIPLINARY_MANUAL_URL + '>) and our general [**Commitment Policy**](<' + COMMITMENT_POLICY_URL + '>). You may message your **line manager** or **department head** to appeal a suspension.\n\n' +
+            '<:volare_fa:1408298318861176920> **Jake Marlon**\n' +
+            '> -# Executive Vice President, Human Resources'
+        )
+        .setTimestamp();
+}
+
+function terminationEmbed(user) {
+    return new EmbedBuilder()
+        .setColor(EMBED_COLOR)
+        .setDescription(
+            '-# _ _\n' +
+            '> ### <:volare_hammer:1408481914112835755> **Termination Notice.**\n' +
+            '-# **You have received a Termination** — Human Resources\n\n' +
+            '> <:volare_arrow:1408485394747490385>Hello, **' + mentionlessUsername(user) + '**. After a thorough review, we regret to inform you that you have received an official **termination** notice from United Airlines. This decision has been made due to multiple violations and increasing reports regarding your conduct, which prompted us to assess your tenure at the company. We wish you all the best in your future endeavors.\n\n' +
+            '<:volare_fa:1408298318861176920> **Jake Marlon**\n' +
+            '> -# Executive Vice President, Human Resources'
+        )
+        .setTimestamp();
+}
+
+async function kickFromGuild(client, guildId, targetId, reason) {
+    if (!guildId) return { ok: false, reason: 'guild_not_configured' };
+    var guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(function () { return null; });
+    if (!guild) return { ok: false, reason: 'guild_not_found' };
+    var member = await guild.members.fetch(targetId).catch(function () { return null; });
+    if (!member) return { ok: true, skipped: true };
+    try {
+        await member.kick(reason);
+        return { ok: true };
+    } catch (err) {
+        return { ok: false, reason: err && err.message ? err.message : 'kick_failed' };
     }
 }
 
@@ -233,6 +294,14 @@ async function handleWarning(interaction, targetId) {
     var member = await interaction.guild.members.fetch(targetId).catch(function () { return null; });
     var user = member ? member.user : await interaction.client.users.fetch(targetId).catch(function () { return null; });
 
+    var warned = await dmEmployee(user, warningEmbed(user));
+    if (!warned) {
+        return interaction.reply({
+            content: '<:e_decline:1397829342079483904> I could not DM this employee the warning notice.',
+            ephemeral: true,
+        });
+    }
+
     await personnelProfile.appendPersonnelAction(targetId, {
         type: 'warning',
         reason: reason,
@@ -240,59 +309,58 @@ async function handleWarning(interaction, targetId) {
         issuedByUsername: interaction.user.username,
     });
 
-    await dmEmployee(
-        user,
-        '<:volare_hammer:1408484978362290287> **Official Warning Notice**\n' +
-        '> You have received a formal warning from United Volare Human Resources.\n' +
-        '> **Reason:** ' + reason + '\n' +
-        '-# Issued by ' + interaction.user.username
-    );
-
     return sendLookupView(interaction, targetId, '<:volare_check:1408484391348605069> Warning issued.');
 }
 
 async function handleSuspension(interaction, targetId) {
     var reason = interaction.fields.getTextInputValue('reason').trim();
-    var days = Number(interaction.fields.getTextInputValue('days').trim());
-    if (!Number.isFinite(days) || days < 1 || days > 365) {
+    var member = await interaction.guild.members.fetch(targetId).catch(function () { return null; });
+    if (!member) {
         return interaction.reply({
-            content: '<:e_decline:1397829342079483904> Suspension length must be between 1 and 365 days.',
+            content: '<:e_decline:1397829342079483904> Employee is no longer in the server.',
             ephemeral: true,
         });
     }
 
-    var member = await interaction.guild.members.fetch(targetId).catch(function () { return null; });
-    var timeoutNote = 'logged only';
-    if (member && member.moderatable && days <= 28) {
-        try {
-            await member.timeout(days * 24 * 60 * 60 * 1000, 'Suspended by ' + interaction.user.username + ': ' + reason);
-            timeoutNote = 'Discord timeout applied';
-        } catch (err) {
-            timeoutNote = 'recorded, but timeout failed';
-        }
-    } else if (days > 28) {
-        timeoutNote = 'recorded only (Discord timeout max is 28 days)';
+    var timeoutNote = 'timeout applied';
+    var returnAt = new Date(Date.now() + (SUSPENSION_DAYS * 24 * 60 * 60 * 1000));
+    var user = member.user || await interaction.client.users.fetch(targetId).catch(function () { return null; });
+
+    var notified = await dmEmployee(user, suspensionEmbed(user));
+    if (!notified) {
+        return interaction.reply({
+            content: '<:e_decline:1397829342079483904> I could not DM this employee the suspension notice.',
+            ephemeral: true,
+        });
     }
 
-    var user = member ? member.user : await interaction.client.users.fetch(targetId).catch(function () { return null; });
+    if (member.moderatable) {
+        try {
+            await member.timeout(SUSPENSION_DAYS * 24 * 60 * 60 * 1000, 'Suspended by ' + interaction.user.username + (reason ? ': ' + reason : ''));
+        } catch (err) {
+            timeoutNote = 'kick fallback scheduled';
+        }
+    }
+
+    if (timeoutNote !== 'timeout applied') {
+        var kickResult = await kickFromGuild(interaction.client, VOLARE_GUILD_ID, targetId, 'Suspended by ' + interaction.user.username + (reason ? ': ' + reason : ''));
+        if (!kickResult.ok) {
+            return interaction.reply({
+                content: '<:e_decline:1397829342079483904> I could not timeout or kick this employee for the suspension.',
+                ephemeral: true,
+            });
+        }
+        await suspensionReturns.queueReturnInvite(VOLARE_GUILD_ID, targetId, user ? user.username : '', returnAt);
+    }
 
     await personnelProfile.appendPersonnelAction(targetId, {
         type: 'suspension',
         reason: reason,
         issuedBy: interaction.user.id,
         issuedByUsername: interaction.user.username,
-        durationDays: days,
+        durationDays: SUSPENSION_DAYS,
         meta: timeoutNote,
     });
-
-    await dmEmployee(
-        user,
-        '<:volare_hammer:1408484978362290287> **Official Suspension Notice**\n' +
-        '> You have been suspended by United Volare Human Resources.\n' +
-        '> **Length:** ' + days + ' day(s)\n' +
-        '> **Reason:** ' + reason + '\n' +
-        '-# Issued by ' + interaction.user.username
-    );
 
     return sendLookupView(interaction, targetId, '<:volare_check:1408484391348605069> Suspension issued: ' + timeoutNote + '.');
 }
@@ -321,19 +389,19 @@ async function handleTermination(interaction, targetId) {
         issuedByUsername: interaction.user.username,
     });
 
-    await dmEmployee(
-        member.user,
-        '<:volare_hammer:1408484978362290287> **Official Termination Notice**\n' +
-        '> Your employment with United Volare has been terminated effective immediately.\n' +
-        '> **Reason:** ' + reason + '\n' +
-        '-# Issued by ' + interaction.user.username
-    );
-
-    try {
-        await member.kick('Terminated by ' + interaction.user.username + ': ' + reason);
-    } catch (err) {
+    var terminatedNotified = await dmEmployee(member.user, terminationEmbed(member.user));
+    if (!terminatedNotified) {
         return interaction.reply({
-            content: '<:e_decline:1397829342079483904> Failed to kick the employee. Check the bot role position and permissions.',
+            content: '<:e_decline:1397829342079483904> I could not DM this employee the termination notice.',
+            ephemeral: true,
+        });
+    }
+
+    var volareKick = await kickFromGuild(interaction.client, VOLARE_GUILD_ID, targetId, 'Terminated by ' + interaction.user.username + (reason ? ': ' + reason : ''));
+    var mainKick = await kickFromGuild(interaction.client, ids.CALENDAR_SERVER_ID, targetId, 'Terminated by ' + interaction.user.username + (reason ? ': ' + reason : ''));
+    if (!volareKick.ok || !mainKick.ok) {
+        return interaction.reply({
+            content: '<:e_decline:1397829342079483904> Failed to remove the employee from one or more United servers.',
             ephemeral: true,
         });
     }
@@ -465,7 +533,7 @@ module.exports = {
         var profile = await personnelProfile.buildPersonnelProfile(resolved.target);
         var embed = personnelProfile.buildProfileEmbed(profile, {
             title: 'United Volare Personnel Lookup',
-            color: 0x0b0fa8,
+            color: EMBED_COLOR,
         });
 
         await interaction.editReply({
