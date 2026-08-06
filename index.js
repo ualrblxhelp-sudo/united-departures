@@ -275,6 +275,14 @@ client.once(Events.ClientReady, async function(c) {
         console.error('[PersonnelProfile] Monthly reset scheduler start error:', err);
     }
 
+    // Handle kicked suspension returns by DMing rejoin invites once the 7-day period ends.
+    try {
+        var suspensionReturns = require('./utils/suspensionReturns');
+        suspensionReturns.startScheduler(client);
+    } catch (err) {
+        console.error('[SuspensionReturns] Scheduler start error:', err);
+    }
+
     // Start the United newsroom watcher (polls press releases, posts summaries to #hemispheres)
     try {
         newsroom.startNewsroomWatcher(client);
