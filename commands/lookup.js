@@ -12,10 +12,8 @@ const permissions = require('../services/permissions');
 const personnelProfile = require('../utils/personnelProfile');
 const points = require('../utils/points');
 const suspensionReturns = require('../utils/suspensionReturns');
-const ids = require('../config/ids');
 
 var VOLARE_GUILD_ID = '1309560657473179679';
-var MAIN_SERVER_ID = '1309560657473179679';
 var LOOKUP_ROLE_ID = '1486059204534997201';
 var EMBED_COLOR = 0x4D1B55;
 var DISCIPLINARY_MANUAL_URL = 'https://docs.google.com/document/d/1Q38Q60kB03Un89TWlOtkN6Pl2RIPHa4GYqSerU62GS0/edit?usp=drive_link';
@@ -398,10 +396,9 @@ async function handleTermination(interaction, targetId) {
     }
 
     var volareKick = await kickFromGuild(interaction.client, VOLARE_GUILD_ID, targetId, 'Terminated by ' + interaction.user.username + (reason ? ': ' + reason : ''));
-    var mainKick = await kickFromGuild(interaction.client, ids.CALENDAR_SERVER_ID, targetId, 'Terminated by ' + interaction.user.username + (reason ? ': ' + reason : ''));
-    if (!volareKick.ok || !mainKick.ok) {
+    if (!volareKick.ok) {
         return interaction.reply({
-            content: '<:e_decline:1397829342079483904> Failed to remove the employee from one or more United servers.',
+            content: '<:e_decline:1397829342079483904> Failed to remove the employee from the Volare server.',
             ephemeral: true,
         });
     }
