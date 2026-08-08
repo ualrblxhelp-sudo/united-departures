@@ -420,6 +420,68 @@ function setupMilesRoute(app, client) {
             return res.json({ ok: true, result: result });
         } catch (err) { return fail(res, err, 'lottery'); }
     });
+
+    // ---- READ: does this member hold an unused voucher? ---------------------
+    // Called by Roblox at booking time to decide whether to charge, and by
+    // :viewuser. Accepts userId or username, same as /status.
+    app.get('/api/miles/voucher', async function (req, res) {
+        if (!keyOk(req, res)) return; if (!sbOk(res)) return;
+        try {
+            var who = await resolveUser(req.query);
+            if (!who) return res.status(400).json({ ok: false, error: 'Provide userId or a resolvable username' });
+            var voucher = await sb.rpc('get_voucher', { p_user_id: who.userId });
+            return res.json({ ok: true, voucher: voucher });
+        } catch (err) { return fail(res, err, 'voucher'); }
+    });
+
+    // ---- WRITE: consume a voucher (called at flight payout) ------------------
+    // NOT called at booking. A passenger who books and never flies keeps their
+    // voucher, so this fires only once the flight is actually paid out.
+    app.post('/api/miles/voucher/consume', async function (req, res) {
+        if (!keyOk(req, res)) return; if (!sbOk(res)) return;
+        var b = req.body || {};
+        if (!b.userId) return res.status(400).json({ ok: false, error: 'userId required' });
+        if (!b.flightId) return res.status(400).json({ ok: false, error: 'flightId required' });
+        try {
+            var result = await sb.rpc('consume_voucher', {
+                p_user_id: Number(b.userId),
+                p_flight_id: b.flightId,
+            });
+            return res.json({ ok: true, result: result });
+        } catch (err) { return fail(res, err, 'voucher/consume'); }
+    });
+
+    // ---- READ: everything about a member, for :viewuser ----------------------
+    // One call rather than four: the Adonis command runs on a moderator's click
+    // and should not fan out into separate status/card/voucher round trips.
+    app.get('/api/miles/full', async function (req, res) {
+        if (!keyOk(req, res)) return; if (!sbOk(res)) return;
+        try {
+            var who = await resolveUser(req.query);
+            if (!who) return res.status(400).json({ ok: false, error: 'Provide userId or a resolvable username' });
+
+            var status = await sb.rpc('get_member_status', { p_user_id: who.userId });
+
+            // A missing voucher must not fail the whole lookup -- staff still
+            // want the miles even if the voucher table is unreachable.
+            var voucher = null;
+            try {
+                voucher = await sb.rpc('get_voucher', { p_user_id: who.userId });
+            } catch (err) {
+                console.error('[miles/full] voucher lookup failed:', err.message);
+            }
+
+            var payload = {};
+            var src = (status && status.data) ? status.data : status;
+            for (var k in src) payload[k] = src[k];
+
+            payload.userId = who.userId;
+            payload.username = who.username || payload.username;
+            payload.voucher = (voucher && voucher.data) ? voucher.data : voucher;
+
+            return res.json({ ok: true, data: payload });
+        } catch (err) { return fail(res, err, 'full'); }
+    });
 }
 
 module.exports = { setupMilesRoute };
