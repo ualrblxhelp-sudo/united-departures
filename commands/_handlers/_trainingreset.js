@@ -2,27 +2,21 @@ const ids = require('../../config/ids');
 const TrainingAssignment = require('../../models/TrainingAssignment');
 const trainingPanel = require('../../utils/trainingPanel');
 const commence = require('./_trainingcommence');
-const { PermissionFlagsBits } = require('discord.js');
+const { PermissionFlagsBits, MessageFlags } = require('discord.js');
 
 module.exports = {
     async execute(interaction) {
         if (interaction.guildId !== ids.AVIATE_SERVER_ID) {
-            return interaction.reply({ content: 'This command can only be used in the United Aviate server.', ephemeral: true });
+            return interaction.reply({ content: 'This command can only be used in the United Aviate server.', flags: MessageFlags.Ephemeral });
         }
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: 'Only server administrators can use this command.', ephemeral: true });
+            return interaction.reply({ content: 'Only server administrators can use this command.', flags: MessageFlags.Ephemeral });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.reply({ content: 'Resetting active training assignments...', flags: MessageFlags.Ephemeral });
 
         var active = await TrainingAssignment.find({ status: 'active' }).lean().catch(function () { return []; });
         var clearedStudents = {};
-
-        try {
-            await interaction.guild.members.fetch();
-        } catch (err) {
-            console.error('[TrainingReset] members.fetch failed:', err);
-        }
 
         for (var i = 0; i < active.length; i++) {
             clearedStudents[active[i].studentId] = true;
