@@ -31,6 +31,23 @@ async function safeDM(member, payload) {
     }
 }
 
+async function runAssignmentPass(interaction, options) {
+    options = options || {};
+
+    if (interaction.guildId !== ids.AVIATE_SERVER_ID) {
+        return interaction.reply({ content: 'This command can only be used in the United Aviate server.', ephemeral: true });
+    }
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: 'Only server administrators can use this command.', ephemeral: true });
+    }
+
+    if (!options.skipDefer) {
+        await interaction.deferReply({ ephemeral: true });
+    }
+
+    var guild = interaction.guild;
+    var instructorRoleId = ids.TRAINING_STAFF_ROLE_ID;
+
 // ---- DM copy (message content, not embeds -- headings/subtext/blockquotes) ----
 
 function studentMessage(instructor) {
@@ -61,20 +78,8 @@ ${list}
 > -# President, United Airlines`;
 }
 
-module.exports = {
-    async execute(interaction) {
-        if (interaction.guildId !== ids.AVIATE_SERVER_ID) {
-            return interaction.reply({ content: 'This command can only be used in the United Aviate server.', ephemeral: true });
-        }
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return interaction.reply({ content: 'Only server administrators can use this command.', ephemeral: true });
-        }
-
-        await interaction.deferReply({ ephemeral: true });
-
-        var guild = interaction.guild;
-        var instructorRoleId = ids.TRAINING_STAFF_ROLE_ID;
-
+    // Load the full member list so role-based matching is accurate.
+    // This also ensures role add/remove later in the pass has live members.
         try {
             await guild.members.fetch();
         } catch (err) {
@@ -158,6 +163,8 @@ module.exports = {
                     console.error('[CommenceTraining] assignment save failed:', err);
                 }
 
+                await student.roles.add(ids.TRAINING_INTRAINING_ROLE_ID).catch(function () {});
+
                 allAssignments.push({ student: student, instructor: instructor, deptLabel: dept.label });
                 if (!byInstructor[instructor.id]) {
                     byInstructor[instructor.id] = { instructor: instructor, students: [] };
@@ -229,15 +236,25 @@ module.exports = {
 
         var summary = new EmbedBuilder()
             .setColor(ids.EMBED_COLOR)
-            .setTitle('Training Commenced')
+            .setTitle(options.summaryTitle || 'Training Commenced')
             .setDescription(lines.join('\n').slice(0, 4000))
             .setFooter({ text: 'United Aviate \u2022 ' + allAssignments.length + ' assignment(s)' })
             .setTimestamp();
+
+        if (options.summaryNote) {
+            summary.addFields({ name: 'Reset Note', value: options.summaryNote.slice(0, 1024) });
+        }
 
         trainingPanel.syncTrainingPanel(interaction.client).catch(function (err) {
             console.error('[CommenceTraining] Panel sync error:', err);
         });
 
         return interaction.editReply({ embeds: [summary] });
+}
+
+module.exports = {
+    async execute(interaction) {
+        return runAssignmentPass(interaction);
     },
+    runAssignmentPass: runAssignmentPass,
 };
