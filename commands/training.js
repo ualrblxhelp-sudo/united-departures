@@ -3,6 +3,7 @@ const commence = require('./_handlers/_trainingcommence');
 const log = require('./_handlers/_traininglog');
 const attendance = require('./_handlers/_trainingattendance');
 const panel = require('./_handlers/_trainingpanel');
+const reset = require('./_handlers/_trainingreset');
 
 var TRAINING_TYPES = [
     { name: 'customer-service', label: 'Customer Service' },
@@ -54,6 +55,11 @@ module.exports = {
             return sc
                 .setName('panel')
                 .setDescription('View trainee/instructor assignments and completion status (admin only)');
+        })
+        .addSubcommand(function (sc) {
+            return sc
+                .setName('reset')
+                .setDescription('Reset active training assignments and recommence them (admin only)');
         }),
 
     async execute(interaction) {
@@ -62,6 +68,7 @@ module.exports = {
         if (sub === 'log') return log.execute(interaction);
         if (sub === 'attendance') return attendance.execute(interaction);
         if (sub === 'panel') return panel.execute(interaction);
+        if (sub === 'reset') return reset.execute(interaction);
         return interaction.reply({ content: 'Unknown subcommand.', ephemeral: true });
     },
 
