@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { EmbedBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const ids = require('../../config/ids');
 const TraineeProfile = require('../../models/TraineeProfile');
 const TrainingAssignment = require('../../models/TrainingAssignment');
@@ -31,25 +31,6 @@ async function safeDM(member, payload) {
     }
 }
 
-async function runAssignmentPass(interaction, options) {
-    options = options || {};
-
-    if (interaction.guildId !== ids.AVIATE_SERVER_ID) {
-        return interaction.reply({ content: 'This command can only be used in the United Aviate server.', ephemeral: true });
-    }
-    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-        return interaction.reply({ content: 'Only server administrators can use this command.', ephemeral: true });
-    }
-
-    if (!options.skipDefer) {
-        await interaction.deferReply({ ephemeral: true });
-    }
-
-    var guild = interaction.guild;
-    var instructorRoleId = ids.TRAINING_STAFF_ROLE_ID;
-
-// ---- DM copy (message content, not embeds -- headings/subtext/blockquotes) ----
-
 function studentMessage(instructor) {
     return `-# _ _
 > ### <:uaaviate_staff:1465428477132935251>**Stage 2: Instructional Training**
@@ -78,14 +59,67 @@ ${list}
 > -# President, United Airlines`;
 }
 
+async function primeTrainingMembers(guild) {
+    try {
+        var after = undefined;
+        var total = 0;
+        var pages = 0;
+
+        while (true) {
+            var batch = await guild.members.list({ after: after, limit: 1000, cache: true });
+            if (!batch || batch.size === 0) break;
+
+            total += batch.size;
+            pages += 1;
+            after = batch.lastKey();
+
+            if (batch.size < 1000) break;
+        }
+
+        return {
+            ok: true,
+            mode: 'rest',
+            note: total > 0 ? 'Loaded ' + total + ' member(s) across ' + pages + ' page(s) using the REST member list.' : '',
+        };
+    } catch (err) {
+        var cachedCount = guild.members.cache ? guild.members.cache.size : 0;
+        console.error('[CommenceTraining] members.list failed:', err);
+        if (cachedCount > 0) {
+            return {
+                ok: true,
+                mode: 'cache',
+                note: 'REST member loading failed, so assignments were generated from the currently cached member list only.',
+                error: err,
+            };
+        }
+        return { ok: false, mode: 'none', error: err };
+    }
+}
+
+async function runAssignmentPass(interaction, options) {
+    options = options || {};
+
+    if (interaction.guildId !== ids.AVIATE_SERVER_ID) {
+        return interaction.reply({ content: 'This command can only be used in the United Aviate server.', flags: MessageFlags.Ephemeral });
+    }
+    if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        return interaction.reply({ content: 'Only server administrators can use this command.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (!options.skipDefer) {
+        await interaction.reply({ content: 'Building training assignments...', flags: MessageFlags.Ephemeral });
+    }
+
+    var guild = interaction.guild;
+    var instructorRoleId = ids.TRAINING_STAFF_ROLE_ID;
+
     // Load the full member list so role-based matching is accurate.
     // This also ensures role add/remove later in the pass has live members.
-        try {
-            await guild.members.fetch();
-        } catch (err) {
-            console.error('[CommenceTraining] members.fetch failed:', err);
-            return interaction.editReply({ content: 'Could not load the member list (is the Server Members intent enabled?).' });
-        }
+    var memberPrime = await primeTrainingMembers(guild);
+    if (!memberPrime.ok) {
+        var fetchReason = memberPrime.error && memberPrime.error.message ? memberPrime.error.message : 'unknown error';
+        return interaction.editReply({ content: 'Could not load the member list for training assignments. Fetch error: `' + fetchReason + '`' });
+    }
 
         // Exclude students who already finished their department's training.
         var completedByUser = {};
@@ -243,6 +277,9 @@ ${list}
 
         if (options.summaryNote) {
             summary.addFields({ name: 'Reset Note', value: options.summaryNote.slice(0, 1024) });
+        }
+        if (memberPrime.note) {
+            summary.addFields({ name: 'Member Fetch Note', value: memberPrime.note.slice(0, 1024) });
         }
 
         trainingPanel.syncTrainingPanel(interaction.client).catch(function (err) {
