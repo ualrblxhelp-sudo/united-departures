@@ -1,384 +1,340 @@
-require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, Events, REST, Routes, MessageFlags } = require('discord.js');
-const mongoose = require('mongoose');
-const fs = require('fs');
-const path = require('path');
-const express = require('express');
-const engagement = require('./utils/engagement');
-const newsroom = require('./utils/newsroom');
-const applications = require('./routes/applications');
-const expressApp = express();
-const flightsApi = require('./routes/flights');
-const airportsApi = require('./routes/airports');
-const milesApi = require('./routes/miles');
-const milesCycle = require('./utils/milesCycle');
-const trainingPanel = require('./utils/trainingPanel');
-const ids = require('./config/ids');
-const { Rank77Watchdog } = require('./services/rank77Watchdog');
-const { store: rank77Store } = require('./models/rank77store');
-const bloxlink = require('./services/bloxlink');
-expressApp.use(express.json());
+'use strict';
 
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.GuildMembers,
-    ],
-});
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const {
+  GUARDED_ROLE_RANK,
+  MIN_GRANTER_RANK,
+} = require('../services/rank77Watchdog');
 
-client.commands = new Collection();
-const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(function(f) { return f.endsWith('.js'); });
+/**
+ * /seniortechops authorize <user id> [reason]
+ * /seniortechops revoke    <user id>
+ * /seniortechops list
+ * /seniortechops sweep
+ *
+ * VISIBILITY
+ * ----------
+ * Registered to the Volare guild ONLY. Do not add this to the main guild's
+ * command list -- guild-scoped registration is what keeps it off the main
+ * server entirely, not a runtime check.
+ *
+ * Within Volare it is hidden by setDefaultMemberPermissions(0), which removes
+ * it from everyone including administrators until explicitly allowed. Grant it
+ * to GATE_ROLE_ID under Server Settings -> Integrations -> (bot) -> Command
+ * Permissions. That is what makes it invisible in the picker for other staff.
+ *
+ * AUTHORIZATION
+ * -------------
+ * Two independent gates, both enforced at call time:
+ *   1. Discord: caller's highest role must sit at or above GATE_ROLE_ID.
+ *   2. Roblox:  caller's group rank must be MIN_GRANTER_RANK+ (checked inside
+ *               the watchdog for authorize/revoke).
+ * Discord permissions alone are not sufficient, because the thing being
+ * guarded is a Roblox role.
+ */
 
-const seniorTechOpsWatchdog = new Rank77Watchdog({
-    store: rank77Store,
-    onEvent: function(event) {
-        var stage = event.stage ? ' ' + event.stage : '';
-        var message = event.message ? ' - ' + event.message : '';
-        console.log('[SeniorTechOps][' + event.type + ']' + stage + message);
-    },
-});
+const VOLARE_GUILD_ID = '1309560657473179679';
+const GATE_ROLE_ID = '1309564307142606848';
 
-async function resolveRobloxFromDiscord(discordId) {
-    var result = await bloxlink.discordToRoblox(discordId);
-    if (!result.configured) {
-        throw new Error('Bloxlink is not configured');
-    }
-    if (!result.linked || !result.robloxId) {
-        return null;
-    }
-    return String(result.robloxId);
+function formatTechOpsError(err) {
+  if (!err) return 'An unknown error occurred.';
+
+  if (err.status === 401) {
+    return 'Roblox access is misconfigured. `ROBLOX_OPENCLOUD_KEY` must be a Roblox User API key or OAuth token with the required group scopes.';
+  }
+
+  return err.message || 'An unknown error occurred.';
 }
 
-const commandContext = {
-    watchdog: seniorTechOpsWatchdog,
-    resolveRoblox: resolveRobloxFromDiscord,
+function formatAuthorizationLines(records) {
+  return records
+    .map(
+      (r) =>
+        `\`${r.userId}\` - granted by \`${r.grantedBy}\` (rank ${r.grantedByRank})` +
+        (r.reason ? `\n> ${r.reason}` : '')
+    )
+    .join('\n\n')
+    .slice(0, 1024);
+}
+
+function formatHolderLines(holders, authorizedIds) {
+  return holders
+    .map((holder) => {
+      const status = authorizedIds.has(String(holder.userId))
+        ? 'authorized'
+        : 'not in store';
+      return `\`${holder.userId}\` - ${status}`;
+    })
+    .join('\n')
+    .slice(0, 1024);
+}
+
+/**
+ * True if the member holds GATE_ROLE_ID, or any role positioned above it.
+ * Uses position rather than a role ID list so a future senior role added above
+ * this one inherits access without a code change.
+ */
+function meetsRoleGate(member) {
+  if (!member || !member.guild) {
+    return false;
+  }
+
+  const gateRole = member.guild.roles.cache.get(GATE_ROLE_ID);
+  if (!gateRole) {
+    return false;
+  }
+
+  // Guild owner always passes; they can grant themselves the role anyway.
+  if (member.id === member.guild.ownerId) {
+    return true;
+  }
+
+  return member.roles.cache.some((role) => role.position >= gateRole.position);
+}
+
+module.exports = {
+  // Consumed by the registration step so this lands in Volare only.
+  guildOnly: VOLARE_GUILD_ID,
+  gateRoleId: GATE_ROLE_ID,
+
+  data: new SlashCommandBuilder()
+    .setName('seniortechops')
+    .setDescription(`Manage who may hold group rank ${GUARDED_ROLE_RANK}`)
+    // Hidden from everyone until allowed per-role in Integrations.
+    .setDefaultMemberPermissions(0)
+    .setDMPermission(false)
+    .addSubcommand((sub) =>
+      sub
+        .setName('authorize')
+        .setDescription('Permit a Roblox user to hold the guarded rank')
+        .addStringOption((opt) =>
+          opt
+            .setName('user_id')
+            .setDescription('Roblox user ID')
+            .setRequired(true)
+        )
+        .addStringOption((opt) =>
+          opt.setName('reason').setDescription('Why this is being granted')
+        )
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('revoke')
+        .setDescription('Withdraw permission to hold the guarded rank')
+        .addStringOption((opt) =>
+          opt
+            .setName('user_id')
+            .setDescription('Roblox user ID')
+            .setRequired(true)
+        )
+    )
+    .addSubcommand((sub) =>
+      sub.setName('list').setDescription('Show everyone currently authorized')
+    )
+    .addSubcommand((sub) =>
+      sub.setName('sweep').setDescription('Run a check immediately')
+    ),
+
+  /**
+   * @param {import('discord.js').ChatInputCommandInteraction} interaction
+   * @param {{ watchdog: object, resolveRoblox: Function }} ctx
+   */
+  async execute(interaction, ctx) {
+    ctx = ctx || {};
+    const { watchdog, resolveRoblox } = ctx;
+
+    if (!watchdog || typeof resolveRoblox !== 'function') {
+      return interaction.reply({
+        content: 'Senior Tech Ops services are not available right now. Try again shortly.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // Guild gate. Belt-and-braces alongside guild-scoped registration.
+    if (interaction.guildId !== VOLARE_GUILD_ID) {
+      return interaction.reply({
+        content: 'This command is only available in the Volare server.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    // Role gate. Fetch rather than trusting cache, so a just-removed role is
+    // reflected immediately.
+    let member;
+    try {
+      member = await interaction.guild.members.fetch(interaction.user.id);
+    } catch {
+      return interaction.editReply('Could not verify your roles. Try again shortly.');
+    }
+
+    if (!meetsRoleGate(member)) {
+      return interaction.editReply('You do not have permission to use this command.');
+    }
+
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === 'list') {
+      const records = await watchdog.store.all();
+      const authorizedIds = new Set(records.map((record) => String(record.userId)));
+      let holders = [];
+      let liveError = null;
+
+      try {
+        holders = await watchdog.listGuardedMembers();
+      } catch (err) {
+        liveError = formatTechOpsError(err);
+      }
+
+      if (!records.length && !holders.length) {
+        if (liveError) {
+          return interaction.editReply(
+            'No stored authorizations were found, and the live Roblox holder check is unavailable right now.\n' +
+              liveError
+          );
+        }
+
+        return interaction.editReply(
+          `No stored authorizations were found, and nobody is currently holding rank ${GUARDED_ROLE_RANK}.`
+        );
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle(`Rank ${GUARDED_ROLE_RANK} senior tech ops status`)
+        .setColor(0x0033a0)
+        .setFooter({ text: 'United Airlines' });
+
+      embed.addFields({
+        name: 'Stored Authorizations',
+        value: records.length
+          ? formatAuthorizationLines(records)
+          : 'None recorded in MongoDB.',
+      });
+
+      if (holders.length) {
+        embed.addFields({
+          name: `Current Rank ${GUARDED_ROLE_RANK} Holders`,
+          value: formatHolderLines(holders, authorizedIds),
+        });
+      } else if (liveError) {
+        embed.addFields({
+          name: 'Current Holder Check',
+          value: liveError.slice(0, 1024),
+        });
+      } else {
+        embed.addFields({
+          name: `Current Rank ${GUARDED_ROLE_RANK} Holders`,
+          value: 'Nobody currently holds this rank.',
+        });
+      }
+
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    // Bloxlink: Discord ID -> Roblox user ID
+    let callerRobloxId;
+    try {
+      callerRobloxId = await resolveRoblox(interaction.user.id);
+    } catch (err) {
+      return interaction.editReply(
+        `Could not resolve your Roblox account: ${err.message}`
+      );
+    }
+
+    if (!callerRobloxId) {
+      return interaction.editReply(
+        'Your Discord account is not linked to Roblox. Verify with Bloxlink first.'
+      );
+    }
+
+    if (sub === 'authorize') {
+      const target = interaction.options.getString('user_id');
+      const reason = interaction.options.getString('reason');
+
+      if (!/^\d+$/.test(target)) {
+        return interaction.editReply(
+          'That is not a valid Roblox user ID. Expecting digits only.'
+        );
+      }
+
+      let result;
+      try {
+        result = await watchdog.authorize({
+          targetUserId: target,
+          granterUserId: callerRobloxId,
+          reason,
+        });
+      } catch (err) {
+        return interaction.editReply(formatTechOpsError(err));
+      }
+
+      if (!result.ok) {
+        return interaction.editReply(result.error);
+      }
+
+      return interaction.editReply(
+        `Roblox user \`${target}\` may now hold rank ${GUARDED_ROLE_RANK}. ` +
+          'They still need ranking manually; this only stops the watchdog reverting it.'
+      );
+    }
+
+    if (sub === 'revoke') {
+      const target = interaction.options.getString('user_id');
+
+      if (!/^\d+$/.test(target)) {
+        return interaction.editReply(
+          'That is not a valid Roblox user ID. Expecting digits only.'
+        );
+      }
+
+      let result;
+      try {
+        result = await watchdog.revoke({
+          targetUserId: target,
+          actorUserId: callerRobloxId,
+        });
+      } catch (err) {
+        return interaction.editReply(formatTechOpsError(err));
+      }
+
+      if (!result.ok) {
+        return interaction.editReply(result.error);
+      }
+
+      return interaction.editReply(
+        `Authorization for \`${target}\` withdrawn. If they currently hold rank ` +
+          `${GUARDED_ROLE_RANK} they will be reverted on the next sweep.`
+      );
+    }
+
+    if (sub === 'sweep') {
+      let caller;
+      try {
+        caller = await watchdog.getRank(callerRobloxId);
+      } catch (err) {
+        return interaction.editReply(formatTechOpsError(err));
+      }
+
+      if (!caller || caller.rank < MIN_GRANTER_RANK) {
+        return interaction.editReply(
+          `Running a sweep requires group rank ${MIN_GRANTER_RANK}+.`
+        );
+      }
+
+      let result;
+      try {
+        result = await watchdog.sweep();
+      } catch (err) {
+        return interaction.editReply(formatTechOpsError(err));
+      }
+
+      return interaction.editReply(
+        `Sweep complete. Checked ${result.checked} holder(s), ` +
+          `reverted ${result.reverted}, ${result.errors} error(s).`
+      );
+    }
+
+    return interaction.editReply('Unknown subcommand.');
+  },
 };
-
-for (const file of commandFiles) {
-    const command = require(path.join(commandsPath, file));
-    if (command.data) {
-        client.commands.set(command.data.name, command);
-    }
-}
-
-client.on(Events.InteractionCreate, async function(interaction) {
-    try {
-        if (interaction.isChatInputCommand()) {
-            const command = client.commands.get(interaction.commandName);
-            if (command) await command.execute(interaction, commandContext);
-            return;
-        }
-
-        if (interaction.isStringSelectMenu()) {
-            var id = interaction.customId;
-            if (id === 'create_type') {
-                return await client.commands.get('flight').create_handleTypeSelect(interaction);
-            }
-            if (id === 'create_aircraft') {
-                return await client.commands.get('flight').create_handleAircraftSelect(interaction);
-            }
-            if (id === 'allocate_flight') {
-                return await client.commands.get('flight').allocate_handleFlightSelect(interaction);
-            }
-            if (id === 'allocate_position') {
-                return await client.commands.get('flight').allocate_handlePositionSelect(interaction);
-            }
-            if (id === 'unallocate_flight') {
-                return await client.commands.get('flight').unallocate_handleFlightSelect(interaction);
-            }
-            if (id === 'bugreport_type') {
-                return await client.commands.get('bugreport').handleTypeSelect(interaction);
-            }
-            // /flightpanel: every control is prefixed fp_, so one check routes them all.
-            if (id.indexOf('fp_') === 0) {
-                return await client.commands.get('flightpanel').handleSelect(interaction);
-            }
-            return;
-        }
-
-        if (interaction.isModalSubmit()) {
-            var mid = interaction.customId;
-            if (mid === 'create_modal') {
-                return await client.commands.get('flight').create_handleModalSubmit(interaction);
-            }
-            if (mid === 'bugreport_modal') {
-                return await client.commands.get('bugreport').handleModalSubmit(interaction);
-            }
-            if (mid === 'inactivity_modal') {
-                return await client.commands.get('inactivity').handleModalSubmit(interaction);
-            }
-            if (mid === 'suggest_modal') {
-                return await client.commands.get('suggest').handleModalSubmit(interaction);
-            }
-            if (mid.indexOf('fp_') === 0) {
-                return await client.commands.get('flightpanel').handleModal(interaction);
-            }
-            if (mid.indexOf('lu_modal_') === 0) {
-                return await client.commands.get('lookup').handleModal(interaction);
-            }
-            return;
-        }
-
-        if (interaction.isButton()) {
-            var bid = interaction.customId;
-            if (bid === 'create_confirm') {
-                return await client.commands.get('flight').create_handleConfirm(interaction);
-            }
-            if (bid === 'create_cancel') {
-                return await client.commands.get('flight').create_handleCancel(interaction);
-            }
-            if (bid.indexOf('fp_') === 0) {
-                return await client.commands.get('flightpanel').handleButton(interaction);
-            }
-            if (bid.indexOf('tp_') === 0) {
-                return await client.commands.get('training').handleButton(interaction);
-            }
-            if (bid.indexOf('lu_btn_') === 0) {
-                return await client.commands.get('lookup').handleButton(interaction);
-            }
-            if (bid.indexOf('resign_') === 0) {
-                return await client.commands.get('resign').handleButton(interaction);
-            }
-            if (bid.startsWith('inactivity_approve_')) {
-                var userId = bid.replace('inactivity_approve_', '');
-                return await client.commands.get('inactivity').handleApprove(interaction, userId);
-            }
-            if (bid.startsWith('inactivity_deny_')) {
-                var userId = bid.replace('inactivity_deny_', '');
-                return await client.commands.get('inactivity').handleDeny(interaction, userId);
-            }
-            if (bid === 'fire_confirm') {
-                return await client.commands.get('hr').handleConfirm(interaction);
-            }
-            if (bid === 'fire_cancel') {
-                return await client.commands.get('hr').handleCancel(interaction);
-            }
-            if (bid === 'suggest_up') {
-                return await client.commands.get('suggest').handleVote(interaction, 'up');
-            }
-            if (bid === 'suggest_down') {
-                return await client.commands.get('suggest').handleVote(interaction, 'down');
-            }
-            if (bid.startsWith('pr_accept_')) {
-                return await engagement.handleAccept(interaction);
-            }
-            if (bid.startsWith('pr_reject_')) {
-                return await engagement.handleReject(interaction);
-            }
-            if (bid.startsWith('application_accept_') || bid.startsWith('application_reject_')) {
-                return await applications.handleApplicationDecision(interaction);
-            }
-            return;
-        }
-    } catch (err) {
-        console.error('[Bot] Interaction error:', err);
-        try {
-            var reply = { content: 'An error occurred. Please try again.', flags: MessageFlags.Ephemeral };
-            if (interaction.deferred || interaction.replied) {
-                await interaction.followUp(reply);
-            } else {
-                await interaction.reply(reply);
-            }
-        } catch (e) {}
-    }
-});
-
-client.once(Events.ClientReady, async function(c) {
-    console.log('Logged in as ' + c.user.tag);
-    console.log('Servers: ' + c.guilds.cache.map(function(g) { return g.name; }).join(', '));
-
-    try {
-        var rest = new REST({ version: '10' }).setToken(process.env.BOT_TOKEN);
-
-        // Miles commands are registered GLOBALLY so they work in every server the
-        // bot is in (and in DMs). Anything listed here MUST be excluded from the
-        // guild registrations below, or it will show up twice in that guild.
-        var globalCommands = ['mymiles', 'addmiles', 'removemiles', 'rankupmiles'];
-        var aviateCommands = ['training'];
-
-        // --- Volare staff server: every command EXCEPT the global ones ---
-        var cmds = [];
-        client.commands.forEach(function(cmd) {
-            if (globalCommands.indexOf(cmd.data.name) === -1 && aviateCommands.indexOf(cmd.data.name) === -1) {
-                cmds.push(cmd.data.toJSON());
-            }
-        });
-        if (process.env.STAFF_SERVER_ID) {
-            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.STAFF_SERVER_ID), { body: cmds });
-            console.log('Staff commands registered to Volare (' + cmds.length + ')');
-        }
-
-        // --- Main United server: only its public commands (globals excluded) ---
-        var publicCommands = ['bugreport'];
-        var publicCmds = [];
-        client.commands.forEach(function(cmd) {
-            if (publicCommands.indexOf(cmd.data.name) !== -1 && globalCommands.indexOf(cmd.data.name) === -1) {
-                publicCmds.push(cmd.data.toJSON());
-            }
-        });
-        if (process.env.CALENDAR_SERVER_ID) {
-            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.CALENDAR_SERVER_ID), { body: publicCmds });
-            console.log('Public commands registered to main server (' + publicCmds.length + ')');
-        }
-
-        // --- United Aviate: training staff commands only ---
-        var aviateCmds = [];
-        client.commands.forEach(function(cmd) {
-            if (aviateCommands.indexOf(cmd.data.name) !== -1) {
-                aviateCmds.push(cmd.data.toJSON());
-            }
-        });
-        if (ids.AVIATE_SERVER_ID) {
-            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, ids.AVIATE_SERVER_ID), { body: aviateCmds });
-            console.log('Training commands registered to Aviate (' + aviateCmds.length + ')');
-        }
-
-        // --- GLOBAL: miles commands, available in every server + DMs ---
-        // NOTE: first-time global registration can take up to ~1h to propagate
-        // (Discord caches globals); guild commands are instant by comparison.
-        // Command files and their rank gating are unchanged, so /addmiles,
-        // /removemiles, /rankupmiles still verify the executor's rank in the main
-        // United server no matter where they're run — they stay secure everywhere.
-        var globalCmds = [];
-        client.commands.forEach(function(cmd) {
-            if (globalCommands.indexOf(cmd.data.name) !== -1) {
-                globalCmds.push(cmd.data.toJSON());
-            }
-        });
-        await rest.put(Routes.applicationCommands(process.env.CLIENT_ID), { body: globalCmds });
-        console.log('Miles commands registered globally (' + globalCmds.length + ')');
-    } catch (err) {
-        console.error('Command registration error:', err);
-    }
-
-    var calendar = require('./utils/calendar');
-    calendar.updateAllCalendars(client).catch(function(err) {
-        console.error('Calendar update error:', err);
-    });
-
-    // Self-heal deleted flight allocation posts (mirrors calendar self-healing).
-    // Only recreates threads that are definitively gone (404); transient
-    // startup fetch failures are left alone and retried on the next boot.
-    try {
-        var forumRecovery = require('./utils/forumRecovery');
-        forumRecovery.selfHealForumThreads(client).catch(function(err) {
-            console.error('[ForumRecovery] Self-heal error:', err);
-        });
-    } catch (err) {
-        console.error('[ForumRecovery] Self-heal start error:', err);
-    }
-
-    // Reschedule any un-tallied suggestions that were pending at shutdown
-    try {
-        var suggestCmd = client.commands.get('suggest');
-        if (suggestCmd && typeof suggestCmd.initPendingTallies === 'function') {
-            await suggestCmd.initPendingTallies(client);
-        }
-    } catch (err) {
-        console.error('[Suggest] Pending tally init error:', err);
-    }
-
-    // Start the PR engagement scheduler (noon-Central daily assignment + 23:59 end-of-day check)
-    try {
-        engagement.start(client);
-    } catch (err) {
-        console.error('[PR] Engagement start error:', err);
-    }
-
-    try {
-        if (process.env.ROBLOX_OPENCLOUD_KEY) {
-            seniorTechOpsWatchdog.start();
-        } else {
-            console.log('[SeniorTechOps] Watchdog not started: ROBLOX_OPENCLOUD_KEY is not set.');
-        }
-    } catch (err) {
-        console.error('[SeniorTechOps] Watchdog start error:', err);
-    }
-
-    // Start the points cleanup scheduler (expire 2-month-old points every 6h)
-    try {
-        var points = require('./utils/points');
-        points.startCleanupScheduler(client);
-    } catch (err) {
-        console.error('[Points] Cleanup scheduler start error:', err);
-    }
-
-    // Reset stored manual personnel payment adjustments after each calendar month.
-    try {
-        var personnelProfile = require('./utils/personnelProfile');
-        personnelProfile.startMonthlyResetScheduler();
-    } catch (err) {
-        console.error('[PersonnelProfile] Monthly reset scheduler start error:', err);
-    }
-
-    // Handle kicked suspension returns by DMing rejoin invites once the 7-day period ends.
-    try {
-        var suspensionReturns = require('./utils/suspensionReturns');
-        suspensionReturns.startScheduler(client);
-    } catch (err) {
-        console.error('[SuspensionReturns] Scheduler start error:', err);
-    }
-
-    // Start the United newsroom watcher (polls press releases, posts summaries to #hemispheres)
-    try {
-        newsroom.startNewsroomWatcher(client);
-    } catch (err) {
-        console.error('[Newsroom] Watcher start error:', err);
-    }
-
-    // Keep the Aviate training panel thread refreshed after bot restarts.
-    try {
-        trainingPanel.syncTrainingPanel(client).catch(function(err) {
-            console.error('[TrainingPanel] Startup sync error:', err);
-        });
-    } catch (err) {
-        console.error('[TrainingPanel] Startup sync start error:', err);
-    }
-});
-
-// PR engagement completion detection (watches #hemispheres for @everyone posts)
-client.on(Events.MessageCreate, function(message) {
-    engagement.onMessageCreate(message).catch(function(err) {
-        console.error('[PR] MessageCreate handler error:', err);
-    });
-});
-
-async function start() {
-    try {
-        await mongoose.connect(process.env.MONGODB_URI);
-        console.log('Connected to MongoDB');
-    } catch (err) {
-        console.error('MongoDB connection error:', err);
-        process.exit(1);
-    }
-    try {
-        await client.login(process.env.BOT_TOKEN);
-    } catch (err) {
-        console.error('Discord login error:', err);
-        process.exit(1);
-    }
-
-    // Setup application route
-    applications.setupApplicationRoute(client, expressApp);
-    // Setup read-only flights API (Roblox Flight Hub)
-    flightsApi.setupFlightsRoute(expressApp);
-    // Setup live airport player-count API (Roblox Flight Hub)
-    airportsApi.setupAirportsRoute(expressApp);
-    // Setup MileagePlus miles-engine API (Roblox surfaces + Discord /miles)
-    milesApi.setupMilesRoute(expressApp, client);
-    // Start the rolling per-member qualifying-cycle sweep (6-month demotions).
-    // Replaces the old Jan 31 annual reset, which no longer matches the rules.
-    milesCycle.startMilesCycle();
-
-    // Health check
-    expressApp.get('/', function(req, res) { res.send('Bot is running'); });
-
-    var PORT = process.env.PORT || 3000;
-    expressApp.listen(PORT, function() {
-        console.log('API listening on port ' + PORT);
-    });
-}
-
-start();
