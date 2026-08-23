@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits, Collection, Events, REST, Routes } = require('discord.js');
+const { Client, GatewayIntentBits, Collection, Events, REST, Routes, MessageFlags } = require('discord.js');
 const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
@@ -175,7 +175,7 @@ client.on(Events.InteractionCreate, async function(interaction) {
     } catch (err) {
         console.error('[Bot] Interaction error:', err);
         try {
-            var reply = { content: 'An error occurred. Please try again.', ephemeral: true };
+            var reply = { content: 'An error occurred. Please try again.', flags: MessageFlags.Ephemeral };
             if (interaction.deferred || interaction.replied) {
                 await interaction.followUp(reply);
             } else {
