@@ -14,6 +14,9 @@ const milesApi = require('./routes/miles');
 const milesCycle = require('./utils/milesCycle');
 const trainingPanel = require('./utils/trainingPanel');
 const ids = require('./config/ids');
+const { Rank77Watchdog } = require('./services/rank77Watchdog');
+const { store: rank77Store } = require('./models/rank77store');
+const bloxlink = require('./services/bloxlink');
 expressApp.use(express.json());
 
 const client = new Client({
@@ -28,6 +31,31 @@ client.commands = new Collection();
 const commandsPath = path.join(__dirname, 'commands');
 const commandFiles = fs.readdirSync(commandsPath).filter(function(f) { return f.endsWith('.js'); });
 
+const seniorTechOpsWatchdog = new Rank77Watchdog({
+    store: rank77Store,
+    onEvent: function(event) {
+        var stage = event.stage ? ' ' + event.stage : '';
+        var message = event.message ? ' - ' + event.message : '';
+        console.log('[SeniorTechOps][' + event.type + ']' + stage + message);
+    },
+});
+
+async function resolveRobloxFromDiscord(discordId) {
+    var result = await bloxlink.discordToRoblox(discordId);
+    if (!result.configured) {
+        throw new Error('Bloxlink is not configured');
+    }
+    if (!result.linked || !result.robloxId) {
+        return null;
+    }
+    return String(result.robloxId);
+}
+
+const commandContext = {
+    watchdog: seniorTechOpsWatchdog,
+    resolveRoblox: resolveRobloxFromDiscord,
+};
+
 for (const file of commandFiles) {
     const command = require(path.join(commandsPath, file));
     if (command.data) {
@@ -39,7 +67,7 @@ client.on(Events.InteractionCreate, async function(interaction) {
     try {
         if (interaction.isChatInputCommand()) {
             const command = client.commands.get(interaction.commandName);
-            if (command) await command.execute(interaction);
+            if (command) await command.execute(interaction, commandContext);
             return;
         }
 
@@ -257,6 +285,16 @@ client.once(Events.ClientReady, async function(c) {
         engagement.start(client);
     } catch (err) {
         console.error('[PR] Engagement start error:', err);
+    }
+
+    try {
+        if (process.env.ROBLOX_OPENCLOUD_KEY) {
+            seniorTechOpsWatchdog.start();
+        } else {
+            console.log('[SeniorTechOps] Watchdog not started: ROBLOX_OPENCLOUD_KEY is not set.');
+        }
+    } catch (err) {
+        console.error('[SeniorTechOps] Watchdog start error:', err);
     }
 
     // Start the points cleanup scheduler (expire 2-month-old points every 6h)
