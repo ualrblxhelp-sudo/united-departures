@@ -107,7 +107,15 @@ module.exports = {
    * @param {{ watchdog: object, resolveRoblox: Function }} ctx
    */
   async execute(interaction, ctx) {
+    ctx = ctx || {};
     const { watchdog, resolveRoblox } = ctx;
+
+    if (!watchdog || typeof resolveRoblox !== 'function') {
+      return interaction.reply({
+        content: 'Senior Tech Ops services are not available right now. Try again shortly.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
 
     // Guild gate. Belt-and-braces alongside guild-scoped registration.
     if (interaction.guildId !== VOLARE_GUILD_ID) {
